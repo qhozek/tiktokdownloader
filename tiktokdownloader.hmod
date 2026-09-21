@@ -1,6 +1,6 @@
 HOTARU = {
     "id": "tiktokdownloader",
-    "version": "1.0.4",
+    "version": "1.0.5",
     "commands": ["tt", "ttsound", "yt", "x", "ig", "ttenable", "ttdisable", "ttchats", "ytenable", "ytdisable", "ytchats", "xenable", "xdisable", "xchats", "igenable", "igdisable", "igchats", "allenable", "alldisable", "allchats"],
     "capabilities": ["state", "files", "shell"],
     "watchers": ["autodl"],
@@ -243,11 +243,11 @@ async def _show_enabled(ctx: Any, key: Any, title: Any, empty: Any) -> Any:
     for c in sorted(set(ids)):
         lines.append("• <code>" + str(c) + "</code>")
     await ctx.respond("\n".join(lines))
-async def _shell(ctx: Any, command: Any, timeout: Any = 115) -> Any:
+async def _shell(ctx: Any, command: Any, timeout: Any = 50) -> Any:
     try:
-        timeout = max(1, min(int(timeout), 120))
+        timeout = max(1, min(int(timeout), 55))
     except Exception:
-        timeout = 115
+        timeout = 50
     return await ctx.cap("shell", {"command": command[:4000], "timeout": timeout})
 def _pick_file(output: Any, audio_only: Any) -> Any:
     exts = AUDIO_EXTS if audio_only else (VIDEO_EXTS + AUDIO_EXTS)
@@ -279,7 +279,7 @@ async def _download_one(ctx: Any, url: Any, audio_only: Any, service: Any) -> An
     await ctx.respond(doing)
     cmd = "command -v yt-dlp >/dev/null 2>&1 || { echo NO_YTDLP; exit 3; }; " + ("command -v ffmpeg >/dev/null 2>&1 || { echo NO_FFMPEG; }; " if audio_only else "") + "yt-dlp --no-playlist --no-warnings --socket-timeout 20 -f " + fmt + " -o '" + tpl + "' --print after_move:filepath " + _shq(url) + " 2>&1 | tail -n 30"
     try:
-        res = await _shell(ctx, cmd, 115)
+        res = await _shell(ctx, cmd, 50)
     except Exception as e:
         await ctx.respond("<b>Shell недоступен:</b> <code>" + _esc(type(e).__name__ + ": " + str(e)[:300]) + "</code>")
         return
