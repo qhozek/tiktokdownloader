@@ -1,6 +1,6 @@
 HOTARU = {
     "id": "tiktokdownloader",
-    "version": "1.0.1",
+    "version": "1.0.2",
     "commands": ["tt", "ttsound", "yt", "x", "ig", "ttenable", "ttdisable", "ttchats", "ytenable", "ytdisable", "ytchats", "xenable", "xdisable", "xchats", "igenable", "igdisable", "igchats", "allenable", "alldisable", "allchats"],
     "capabilities": ["state", "files", "shell"],
     "watchers": ["autodl"],
@@ -35,7 +35,7 @@ def _shq(s: Any) -> Any:
     return "'" + str(s).replace("'", "'\"'\"'") + "'"
 def _is_tiktok_url(url: Any) -> Any:
     try:
-        p = urlparse(url)
+        p = urlparse(str(url))
         host = (p.hostname or "").lower().rstrip(".")
     except Exception:
         return False
@@ -65,7 +65,7 @@ def _is_tiktok_url(url: Any) -> Any:
     return False
 def _is_youtube_url(url: Any) -> Any:
     try:
-        p = urlparse(url)
+        p = urlparse(str(url))
         host = (p.hostname or "").lower().rstrip(".")
     except Exception:
         return False
@@ -84,7 +84,7 @@ def _is_youtube_url(url: Any) -> Any:
     return False
 def _is_x_url(url: Any) -> Any:
     try:
-        p = urlparse(url)
+        p = urlparse(str(url))
         host = (p.hostname or "").lower().rstrip(".")
     except Exception:
         return False
@@ -95,7 +95,7 @@ def _is_x_url(url: Any) -> Any:
     return re.search(r"/[^/]+/status/\d+", p.path or "", re.IGNORECASE) is not None
 def _is_instagram_url(url: Any) -> Any:
     try:
-        p = urlparse(url)
+        p = urlparse(str(url))
         host = (p.hostname or "").lower().rstrip(".")
     except Exception:
         return False
@@ -152,9 +152,10 @@ def _chat_id(ctx: Any, invocation: Any = None, message: Any = None) -> Any:
     for obj in (invocation, ctx, message):
         if obj is None:
             continue
-        if isinstance(obj, dict):
+        get = getattr(obj, "get", None)
+        if callable(get):
             for k in ("chat_id", "peer_id", "chat"):
-                v = obj.get(k)
+                v = get(k)
                 if isinstance(v, int) and v:
                     return v
             continue
@@ -171,9 +172,10 @@ def _chat_id(ctx: Any, invocation: Any = None, message: Any = None) -> Any:
 def _msg_text(message: Any) -> Any:
     if message is None:
         return ""
-    if isinstance(message, dict):
+    get = getattr(message, "get", None)
+    if callable(get):
         for k in ("message", "text", "caption", "raw_text"):
-            v = message.get(k)
+            v = get(k)
             if isinstance(v, str) and v.strip():
                 return v
         return ""
@@ -186,18 +188,6 @@ def _msg_text(message: Any) -> Any:
                 return v
         except Exception:
             continue
-    try:
-        g = getattr(message, "get", None)
-        if callable(g):
-            for k in ("message", "text", "caption"):
-                try:
-                    v = g(k)
-                    if isinstance(v, str) and v.strip():
-                        return v
-                except Exception:
-                    continue
-    except Exception:
-        pass
     return ""
 def _load_ids(ctx: Any, key: Any) -> Any:
     try:
@@ -206,8 +196,9 @@ def _load_ids(ctx: Any, key: Any) -> Any:
         return []
     if not isinstance(v, list):
         return []
+    items: Any = v
     out: Any = []
-    for x in v:
+    for x in items:
         try:
             out.append(int(x))
         except Exception:
@@ -292,9 +283,12 @@ async def _download_one(ctx: Any, url: Any, audio_only: Any, service: Any) -> An
     except Exception as e:
         await ctx.respond("<b>Shell недоступен:</b> <code>" + _esc(type(e).__name__ + ": " + str(e)[:300]) + "</code>")
         return
-    rc = res.get("returncode") if isinstance(res, dict) else -1
-    out = res.get("output", "") if isinstance(res, dict) else ""
-    cwd = res.get("cwd", "") if isinstance(res, dict) else ""
+    try:
+        rc = res.get("returncode", -1)
+        out = res.get("output", "")
+        cwd = res.get("cwd", "")
+    except Exception:
+        rc, out, cwd = -1, "", ""
     if "NO_YTDLP" in out or rc == 3:
         await ctx.respond("<b>На сервере нет yt-dlp.</b> Установи yt-dlp и ffmpeg, затем повтори.")
         return
@@ -382,28 +376,40 @@ async def command_ig(ctx: Any, invocation: Any) -> Any:
         return
     await _download_one(ctx, url, False, "ig")
 async def command_ttenable(ctx: Any, invocation: Any) -> Any:
+    _ = invocation
     await _set_enabled(ctx, invocation, "auto_tt", True, "Автоскачивание TikTok")
 async def command_ttdisable(ctx: Any, invocation: Any) -> Any:
+    _ = invocation
     await _set_enabled(ctx, invocation, "auto_tt", False, "Автоскачивание TikTok")
 async def command_ttchats(ctx: Any, invocation: Any) -> Any:
+    _ = invocation
     await _show_enabled(ctx, "auto_tt", "Авто-TikTok:", "Автоскачивание TikTok нигде не включено.")
 async def command_ytenable(ctx: Any, invocation: Any) -> Any:
+    _ = invocation
     await _set_enabled(ctx, invocation, "auto_yt", True, "Автоскачивание YouTube")
 async def command_ytdisable(ctx: Any, invocation: Any) -> Any:
+    _ = invocation
     await _set_enabled(ctx, invocation, "auto_yt", False, "Автоскачивание YouTube")
 async def command_ytchats(ctx: Any, invocation: Any) -> Any:
+    _ = invocation
     await _show_enabled(ctx, "auto_yt", "Авто-YouTube:", "Автоскачивание YouTube нигде не включено.")
 async def command_xenable(ctx: Any, invocation: Any) -> Any:
+    _ = invocation
     await _set_enabled(ctx, invocation, "auto_x", True, "Автоскачивание X/Twitter")
 async def command_xdisable(ctx: Any, invocation: Any) -> Any:
+    _ = invocation
     await _set_enabled(ctx, invocation, "auto_x", False, "Автоскачивание X/Twitter")
 async def command_xchats(ctx: Any, invocation: Any) -> Any:
+    _ = invocation
     await _show_enabled(ctx, "auto_x", "Авто-X:", "Автоскачивание X нигде не включено.")
 async def command_igenable(ctx: Any, invocation: Any) -> Any:
+    _ = invocation
     await _set_enabled(ctx, invocation, "auto_ig", True, "Автоскачивание Instagram")
 async def command_igdisable(ctx: Any, invocation: Any) -> Any:
+    _ = invocation
     await _set_enabled(ctx, invocation, "auto_ig", False, "Автоскачивание Instagram")
 async def command_igchats(ctx: Any, invocation: Any) -> Any:
+    _ = invocation
     await _show_enabled(ctx, "auto_ig", "Авто-Instagram:", "Автоскачивание Instagram нигде не включено.")
 async def command_allenable(ctx: Any, invocation: Any) -> Any:
     cid = _chat_id(ctx, invocation)
@@ -426,6 +432,7 @@ async def command_alldisable(ctx: Any, invocation: Any) -> Any:
         _save_ids(ctx, k, ids)
     await ctx.respond("<b>Все автоскачивания выключены в этом чате.</b>")
 async def command_allchats(ctx: Any, invocation: Any) -> Any:
+    _ = invocation
     lines: Any = ["<b>Все включённые автозагрузки:</b>"]
     any_on = False
     for k, t in (("auto_tt", "TikTok"), ("auto_yt", "YouTube"), ("auto_x", "X"), ("auto_ig", "Instagram")):
@@ -445,8 +452,9 @@ async def watcher_autodl(ctx: Any, message: Any) -> Any:
         text = _msg_text(message)
         mid: Any = None
         try:
-            if isinstance(message, dict):
-                mid = message.get("id") or message.get("message_id")
+            getm: Any = getattr(message, "get", None)
+            if callable(getm):
+                mid = getm("id") or getm("message_id")
             else:
                 mid = getattr(message, "id", None) or getattr(message, "message_id", None)
         except Exception:
@@ -455,12 +463,6 @@ async def watcher_autodl(ctx: Any, message: Any) -> Any:
             try:
                 fetched = await ctx.msg(cid, int(mid))
                 text = _msg_text(fetched)
-                if not text and isinstance(fetched, dict):
-                    for k in ("message", "text"):
-                        v = fetched.get(k)
-                        if isinstance(v, str) and v.strip():
-                            text = v
-                            break
             except Exception:
                 return
         if not text:
