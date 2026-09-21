@@ -1,6 +1,6 @@
 HOTARU = {
     "id": "tiktokdownloader",
-    "version": "1.0.3",
+    "version": "1.0.4",
     "commands": ["tt", "ttsound", "yt", "x", "ig", "ttenable", "ttdisable", "ttchats", "ytenable", "ytdisable", "ytchats", "xenable", "xdisable", "xchats", "igenable", "igdisable", "igchats", "allenable", "alldisable", "allchats"],
     "capabilities": ["state", "files", "shell"],
     "watchers": ["autodl"],
@@ -299,18 +299,19 @@ async def _download_one(ctx: Any, url: Any, audio_only: Any, service: Any) -> An
         return
     try:
         names = await ctx.cap("files", {"op": "list"})
+        missing = fname not in names
     except Exception:
-        names = []
-    raw: Any = names
-    if isinstance(names, list) and fname not in names:
+        names = fname  # unused below; keeps assignment definite
+        missing = False
+    if missing:
         base = fname
         found: Any = None
-        for n in raw:
+        for n in names:
             if isinstance(n, str) and n == base:
                 found = n
                 break
         if found is None and names:
-            for n in raw:
+            for n in names:
                 if isinstance(n, str) and (n.startswith("dl_") or n.startswith("au_")):
                     found = n
         if found is not None:
