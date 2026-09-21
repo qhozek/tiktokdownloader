@@ -1,6 +1,6 @@
 HOTARU = {
     "id": "tiktokdownloader",
-    "version": "1.0.5",
+    "version": "1.0.6",
     "commands": ["tt", "ttsound", "yt", "x", "ig", "ttenable", "ttdisable", "ttchats", "ytenable", "ytdisable", "ytchats", "xenable", "xdisable", "xchats", "igenable", "igdisable", "igchats", "allenable", "alldisable", "allchats"],
     "capabilities": ["state", "files", "shell"],
     "watchers": ["autodl"],
@@ -277,7 +277,7 @@ async def _download_one(ctx: Any, url: Any, audio_only: Any, service: Any) -> An
         tpl = "dl_%(id)s.%(ext)s"
         doing = "<b>Скачиваю…</b>"
     await ctx.respond(doing)
-    cmd = "command -v yt-dlp >/dev/null 2>&1 || { echo NO_YTDLP; exit 3; }; " + ("command -v ffmpeg >/dev/null 2>&1 || { echo NO_FFMPEG; }; " if audio_only else "") + "yt-dlp --no-playlist --no-warnings --socket-timeout 20 -f " + fmt + " -o '" + tpl + "' --print after_move:filepath " + _shq(url) + " 2>&1 | tail -n 30"
+    cmd = "command -v yt-dlp >/dev/null 2>&1 || { echo NO_YTDLP; exit 3; }; " + ("command -v ffmpeg >/dev/null 2>&1 || { echo NO_FFMPEG; }; " if audio_only else "") + "yt-dlp --no-playlist --no-warnings --socket-timeout 20 --retries 3 --max-filesize 100M -f " + fmt + " -o '" + tpl + "' --print after_move:filepath " + _shq(url) + " 2>&1 | tail -n 30"
     try:
         res = await _shell(ctx, cmd, 50)
     except Exception as e:
@@ -286,9 +286,8 @@ async def _download_one(ctx: Any, url: Any, audio_only: Any, service: Any) -> An
     try:
         rc = res.get("returncode", -1)
         out = res.get("output", "")
-        cwd = res.get("cwd", "")
     except Exception:
-        rc, out, cwd = -1, "", ""
+        rc, out = -1, ""
     if "NO_YTDLP" in out or rc == 3:
         await ctx.respond("<b>На сервере нет yt-dlp.</b> Установи yt-dlp и ffmpeg, затем повтори.")
         return
@@ -297,36 +296,20 @@ async def _download_one(ctx: Any, url: Any, audio_only: Any, service: Any) -> An
         tail = _esc(str(out)[-1200:])
         await ctx.respond("<b>Не удалось скачать.</b>\n<blockquote expandable>" + tail + "</blockquote>")
         return
-    try:
-        names = await ctx.cap("files", {"op": "list"})
-        missing = fname not in names
-    except Exception:
-        names = fname  # unused below; keeps assignment definite
-        missing = False
-    if missing:
-        base = fname
-        found: Any = None
-        for n in names:
-            if isinstance(n, str) and n == base:
-                found = n
-                break
-        if found is None and names:
-            for n in names:
-                if isinstance(n, str) and (n.startswith("dl_") or n.startswith("au_")):
-                    found = n
-        if found is not None:
-            fname = found
+    await ctx.respond("<b>Заливаю…</b>")
+    up = await _shell(ctx, "curl -s -m 40 -F 'reqtype=fileupload' -F 'time=72h' -F 'fileToUpload=@" + fname + "' https://litterbox.catbox.moe/resources/internals/api.php", 45)
+    text = str(up.get("output", "") or "")
+    link = ""
+    for tok in text.strip().split():
+        t = tok.strip().strip("'\"")
+        if t.startswith("https://"):
+            link = t
+    if not link:
+        tail = _esc(text[-1200:])
+        await ctx.respond("<b>Не удалось залить.</b>\n<blockquote expandable>" + tail + "</blockquote>")
+        return
     label = {"tt": "TikTok", "yt": "YouTube", "x": "X/Twitter", "ig": "Instagram"}.get(service, "Видео")
-    cap = "<b>" + _esc(label) + "</b>\n<a href=\"" + _esc(url) + "\">Открыть оригинал</a>"
-    path = (str(cwd).rstrip("/") + "/" + fname) if cwd and not fname.startswith("/") else fname
-    try:
-        await ctx.send_file(path, cap)
-    except Exception as e:
-        msg = str(e)[:500]
-        if "sandbox respond media" in msg or "files capability" in msg:
-            await ctx.respond("<b>Файл скачан на сервер:</b> <code>" + _esc(fname) + "</code>\nЯдро Hotaru (sandbox) сейчас блокирует отправку медиа через respond — нужен фикс ядра или запуск как системный модуль (constellations/).\n<blockquote expandable>" + _esc(msg) + "</blockquote>")
-        else:
-            await ctx.respond("<b>Скачано, но не отправлено:</b> <code>" + _esc(fname) + "</code>\n<blockquote expandable>" + _esc(msg) + "</blockquote>")
+    await ctx.respond("<b>" + _esc(label) + "</b>\n<a href=\"" + _esc(link) + "\">Скачать файл</a> <i>(доступен 72 часа)</i>\n<a href=\"" + _esc(url) + "\">Открыть оригинал</a>")
 async def command_tt(ctx: Any, invocation: Any) -> Any:
     p = _prefix(ctx)
     url = await _input_url(ctx, invocation)
