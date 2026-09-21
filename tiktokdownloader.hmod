@@ -1,6 +1,6 @@
 HOTARU = {
     "id": "tiktokdownloader",
-    "version": "1.0.2",
+    "version": "1.0.3",
     "commands": ["tt", "ttsound", "yt", "x", "ig", "ttenable", "ttdisable", "ttchats", "ytenable", "ytdisable", "ytchats", "xenable", "xdisable", "xchats", "igenable", "igdisable", "igchats", "allenable", "alldisable", "allchats"],
     "capabilities": ["state", "files", "shell"],
     "watchers": ["autodl"],
@@ -194,9 +194,9 @@ def _load_ids(ctx: Any, key: Any) -> Any:
         v = ctx.state.get(key, [])
     except Exception:
         return []
+    items: Any = v
     if not isinstance(v, list):
         return []
-    items: Any = v
     out: Any = []
     for x in items:
         try:
@@ -301,15 +301,16 @@ async def _download_one(ctx: Any, url: Any, audio_only: Any, service: Any) -> An
         names = await ctx.cap("files", {"op": "list"})
     except Exception:
         names = []
+    raw: Any = names
     if isinstance(names, list) and fname not in names:
         base = fname
         found: Any = None
-        for n in names:
+        for n in raw:
             if isinstance(n, str) and n == base:
                 found = n
                 break
         if found is None and names:
-            for n in names:
+            for n in raw:
                 if isinstance(n, str) and (n.startswith("dl_") or n.startswith("au_")):
                     found = n
         if found is not None:
