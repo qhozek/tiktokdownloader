@@ -1,24 +1,38 @@
 HOTARU = {
     "id": "tiktokdownloader",
-    "version": "1.0.6",
-    "commands": ["tt", "ttsound", "yt", "x", "ig", "ttenable", "ttdisable", "ttchats", "ytenable", "ytdisable", "ytchats", "xenable", "xdisable", "xchats", "igenable", "igdisable", "igchats", "allenable", "alldisable", "allchats"],
+    "version": "2.0.0",
+    "commands": ["tt", "ttsound", "yt", "stat", "ytstat", "ytdlp", "x", "twitter", "ig", "inst", "instagram", "ttenable", "ttdisable", "ttchats", "ytenable", "ytdisable", "ytchats", "xenable", "xdisable", "xchats", "igenable", "igdisable", "igchats", "allenable", "alldisable", "allchats", "autoconfigure", "autoconfig"],
     "capabilities": ["state", "files", "shell"],
     "watchers": ["autodl"],
     "aliases": {"twitter": "x", "inst": "ig", "instagram": "ig"},
+    "config_schema": {"ru_ip_fix": {"type": "bool", "default": True, "description": "Resolve TikTok shortlinks via external resolver first"}},
     "lexicon": {
-        "en": {"description": "TikTok / YouTube / X / Instagram downloader (yt-dlp via shell)", "commands": {"tt": {"description": "<link> - download TikTok"}, "ttsound": {"description": "<link> - TikTok audio only"}, "yt": {"description": "<link> - download YouTube"}, "x": {"description": "<link> - download X/Twitter"}, "ig": {"description": "<link> - download Instagram"}}},
-        "ru": {"description": "Скачивание TikTok / YouTube / X / Instagram (yt-dlp через shell)", "commands": {"tt": {"description": "<ссылка> - скачать TikTok"}, "ttsound": {"description": "<ссылка> - только звук TikTok"}, "yt": {"description": "<ссылка> - скачать YouTube"}, "x": {"description": "<ссылка> - скачать X/Twitter"}, "ig": {"description": "<ссылка> - скачать Instagram"}}},
+        "en": {"description": "TikTok / YouTube / X / Instagram downloader (yt-dlp + shell)", "commands": {"tt": {"description": "<link> - download TikTok video or photos"}, "ttsound": {"description": "<link> - TikTok audio only"}, "yt": {"description": "<link> - download YouTube video"}, "stat": {"description": "<link> - media diagnostics"}, "ytstat": {"description": "alias for stat"}, "ytdlp": {"description": "check / update yt-dlp"}, "x": {"description": "<link> - download X/Twitter post"}, "twitter": {"description": "alias for x"}, "ig": {"description": "<link> - download Instagram post"}, "inst": {"description": "alias for ig"}, "instagram": {"description": "alias for ig"}, "ttenable": {"description": "enable TikTok autodownload here"}, "ttdisable": {"description": "disable TikTok autodownload here"}, "ttchats": {"description": "list TikTok autodownload chats"}, "ytenable": {"description": "enable YouTube autodownload here"}, "ytdisable": {"description": "disable YouTube autodownload here"}, "ytchats": {"description": "list YouTube autodownload chats"}, "xenable": {"description": "enable X autodownload here"}, "xdisable": {"description": "disable X autodownload here"}, "xchats": {"description": "list X autodownload chats"}, "igenable": {"description": "enable Instagram autodownload here"}, "igdisable": {"description": "disable Instagram autodownload here"}, "igchats": {"description": "list Instagram autodownload chats"}, "allenable": {"description": "enable all autodownloads here"}, "alldisable": {"description": "disable all autodownloads here"}, "allchats": {"description": "list all autodownloads"}, "autoconfigure": {"description": "autodownload setup help"}, "autoconfig": {"description": "alias for autoconfigure"}}},
+        "ru": {"description": "Скачивание TikTok / YouTube / X / Instagram (yt-dlp + shell)", "commands": {"tt": {"description": "<ссылка> - скачать видео или фото из TikTok"}, "ttsound": {"description": "<ссылка> - только звук TikTok"}, "yt": {"description": "<ссылка> - скачать видео YouTube"}, "stat": {"description": "<ссылка> - диагностика медиа"}, "ytstat": {"description": "алиас stat"}, "ytdlp": {"description": "проверить / обновить yt-dlp"}, "x": {"description": "<ссылка> - скачать пост X/Twitter"}, "twitter": {"description": "алиас x"}, "ig": {"description": "<ссылка> - скачать пост Instagram"}, "inst": {"description": "алиас ig"}, "instagram": {"description": "алиас ig"}, "ttenable": {"description": "включить авто-TikTok здесь"}, "ttdisable": {"description": "выключить авто-TikTok здесь"}, "ttchats": {"description": "где включён авто-TikTok"}, "ytenable": {"description": "включить авто-YouTube здесь"}, "ytdisable": {"description": "выключить авто-YouTube здесь"}, "ytchats": {"description": "где включён авто-YouTube"}, "xenable": {"description": "включить авто-X здесь"}, "xdisable": {"description": "выключить авто-X здесь"}, "xchats": {"description": "где включён авто-X"}, "igenable": {"description": "включить авто-Instagram здесь"}, "igdisable": {"description": "выключить авто-Instagram здесь"}, "igchats": {"description": "где включён авто-Instagram"}, "allenable": {"description": "включить все автозагрузки здесь"}, "alldisable": {"description": "выключить все автозагрузки здесь"}, "allchats": {"description": "все включённые автозагрузки"}, "autoconfigure": {"description": "настройка автоскачивания"}, "autoconfig": {"description": "алиас autoconfigure"}}},
     },
 }
 import re
 import html
+import json
+import time
+from datetime import datetime, timedelta, timezone
 from typing import Any
-from urllib.parse import urlparse, unquote
+from urllib.parse import urlparse, unquote, quote
 URL_RE = re.compile(r"https?://[^\s<>]+", re.IGNORECASE)
+TAG_RE = re.compile(r"<[^>]+>")
 SKIP_PREFIXES = (".", "/", "!")
-SKIP_FIRST = {"tt", "ttsound", "yt", "x", "twitter", "ig", "inst", "instagram", "ttenable", "ttdisable", "ytenable", "ytdisable", "xenable", "xdisable", "igenable", "igdisable", "allenable", "alldisable"}
-VIDEO_EXTS = (".mp4", ".mkv", ".webm", ".mov", ".m4v", ".avi", ".3gp", ".ts", ".jpg", ".jpeg", ".png", ".webp")
+SKIP_FIRST = {"tt", "ttsound", "yt", "stat", "ytstat", "ytdlp", "x", "twitter", "ig", "inst", "instagram", "ttenable", "ttdisable", "ttchats", "ytenable", "ytdisable", "ytchats", "xenable", "xdisable", "xchats", "igenable", "igdisable", "igchats", "allenable", "alldisable", "allchats", "autoconfigure", "autoconfig"}
+VIDEO_EXTS = (".mp4", ".mkv", ".webm", ".mov", ".m4v", ".avi", ".3gp", ".ts")
 AUDIO_EXTS = (".mp3", ".m4a", ".ogg", ".opus", ".wav", ".flac")
+IMG_EXTS = (".jpg", ".jpeg", ".png", ".webp")
+TRACK_FALLBACKS = {"original sound", "original audio", "original_sound", "original_audio", "оригинальный звук", "son original", "sonido original", "som original", "suono originale", "Originalton", "geluid origineel", "orijinal ses", "âm thanh gốc", "เสียงต้นฉบับ", "เสียงดั้งเดิม", "الصوت الأصلي", "मूल ध्वनि", "Lights Camera Action"}
+SVC_TT = "tt"
+SVC_YT = "yt"
+SVC_X = "x"
+SVC_IG = "ig"
+SVC_LABEL = {"tt": "TikTok", "yt": "YouTube", "x": "X/Twitter", "ig": "Instagram"}
+SVC_KEY = {"tt": "auto_tt", "yt": "auto_yt", "x": "auto_x", "ig": "auto_ig"}
+META_PRINTS = (("title", "%(title)s"), ("uploader", "%(uploader)s"), ("timestamp", "%(timestamp)s"), ("views", "%(view_count)s"), ("likes", "%(like_count)s"), ("comments", "%(comment_count)s"), ("shares", "%(repost_count)s"), ("width", "%(width)s"), ("height", "%(height)s"), ("webpage_url", "%(webpage_url)s"), ("description", "%(description)s"), ("extractor", "%(extractor)s"), ("format_id", "%(format_id)s"), ("duration", "%(duration)s"), ("filesize", "%(filesize)s"))
 def _prefix(ctx: Any) -> Any:
     try:
         rt = getattr(ctx, "runtime", None)
@@ -33,6 +47,89 @@ def _esc(v: Any) -> Any:
     return html.escape(str(v), quote=False)
 def _shq(s: Any) -> Any:
     return "'" + str(s).replace("'", "'\"'\"'") + "'"
+def _nn(v: Any) -> Any:
+    if v is None:
+        return None
+    s = str(v).strip()
+    if not s or s.casefold() == "na":
+        return None
+    return s
+def _fmt_num(v: Any) -> Any:
+    try:
+        n = int(str(v).replace(" ", "").replace(",", ""))
+    except Exception:
+        return "—"
+    return f"{n:,}".replace(",", " ")
+def _fmt_date(ts: Any) -> Any:
+    try:
+        moment = datetime.fromtimestamp(float(str(ts)), tz=timezone(timedelta(hours=3)))
+    except Exception:
+        return "—"
+    return moment.strftime("%d.%m.%Y %H:%M МСК")
+def _fmt_ymd(s: Any) -> Any:
+    try:
+        t = str(s).strip()
+        return datetime(int(t[0:4]), int(t[4:6]), int(t[6:8]), tzinfo=timezone(timedelta(hours=3))).strftime("%d.%m.%Y МСК")
+    except Exception:
+        return "—"
+def _fmt_dur(v: Any) -> Any:
+    try:
+        total = int(float(str(v)))
+    except Exception:
+        return "—"
+    if total < 0:
+        return "—"
+    if total >= 3600:
+        return f"{total // 3600:02d}:{(total % 3600) // 60:02d}:{total % 60:02d}"
+    return f"{total // 60:02d}:{total % 60:02d}"
+def _fmt_size(v: Any) -> Any:
+    try:
+        size = float(str(v))
+    except Exception:
+        return "—"
+    if size <= 0:
+        return "—"
+    for unit in ("B", "KiB", "MiB", "GiB"):
+        if size < 1024 or unit == "GiB":
+            return (f"{size:.1f} {unit}" if unit != "B" else f"{int(size)} {unit}")
+        size = size / 1024.0
+    return "—"
+def _clean_desc(s: Any, limit: Any = 700) -> Any:
+    try:
+        text = TAG_RE.sub("", str(s or ""))
+    except Exception:
+        return ""
+    text = " ".join(text.split())
+    if not text:
+        return ""
+    try:
+        lim = int(limit)
+    except Exception:
+        lim = 700
+    if len(text) <= lim:
+        return text
+    cut = text.rfind(" ", 0, lim)
+    if cut < max(1, lim // 2):
+        cut = lim
+    return text[:cut].rstrip() + "…"
+def _track_name(meta: Any) -> Any:
+    try:
+        get = meta.get if hasattr(meta, "get") else None
+    except Exception:
+        get = None
+    def one(key: Any) -> Any:
+        try:
+            return get(key) if callable(get) else None
+        except Exception:
+            return None
+    for key in ("track", "title"):
+        name = one(key)
+        if isinstance(name, str) and name.strip():
+            low = name.strip().casefold()
+            if low in TRACK_FALLBACKS:
+                return "Оригинальный звук"
+            return name.strip()
+    return "Аудио из TikTok"
 def _is_tiktok_url(url: Any) -> Any:
     try:
         p = urlparse(str(url))
@@ -63,6 +160,12 @@ def _is_tiktok_url(url: Any) -> Any:
     if re.search(r"(?<!\d)\d{15,24}(?!\d)", dec):
         return True
     return False
+def _is_tiktok_short(url: Any) -> Any:
+    try:
+        host = (urlparse(str(url)).hostname or "").lower().rstrip(".")
+    except Exception:
+        return False
+    return host in ("vm.tiktok.com", "vt.tiktok.com", "v.tiktok.com") or re.match(r"^/t/[A-Za-z0-9_-]{3,}", urlparse(str(url)).path or "") is not None
 def _is_youtube_url(url: Any) -> Any:
     try:
         p = urlparse(str(url))
@@ -101,9 +204,8 @@ def _is_instagram_url(url: Any) -> Any:
         return False
     if p.scheme not in ("http", "https"):
         return False
-    if host not in ("instagram.com", "www.instagram.com", "m.instagram.com", "ddinstagram.com", "www.ddinstagram.com"):
-        if host not in ("instagram.com", "www.instagram.com", "m.instagram.com", "mobile.instagram.com", "instagr.am", "www.instagr.am"):
-            return False
+    if host not in ("instagram.com", "www.instagram.com", "m.instagram.com", "mobile.instagram.com", "instagr.am", "www.instagr.am"):
+        return False
     return re.search(r"/(?:share/)?(?:p|reel|reels|tv)/([A-Za-z0-9_-]+)", p.path or "", re.IGNORECASE) is not None
 def _first_url(text: Any, check: Any) -> Any:
     if not text:
@@ -117,7 +219,7 @@ def _first_url(text: Any, check: Any) -> Any:
             continue
     return None
 def _find_any(text: Any) -> Any:
-    for svc, fn in (("tt", _is_tiktok_url), ("yt", _is_youtube_url), ("x", _is_x_url), ("ig", _is_instagram_url)):
+    for svc, fn in ((SVC_TT, _is_tiktok_url), (SVC_YT, _is_youtube_url), (SVC_X, _is_x_url), (SVC_IG, _is_instagram_url)):
         u = _first_url(text, fn)
         if u:
             return svc, u
@@ -152,10 +254,16 @@ def _chat_id(ctx: Any, invocation: Any = None, message: Any = None) -> Any:
     for obj in (invocation, ctx, message):
         if obj is None:
             continue
-        get = getattr(obj, "get", None)
+        try:
+            get = getattr(obj, "get", None)
+        except Exception:
+            get = None
         if callable(get):
             for k in ("chat_id", "peer_id", "chat"):
-                v = get(k)
+                try:
+                    v = get(k)
+                except Exception:
+                    continue
                 if isinstance(v, int) and v:
                     return v
             continue
@@ -169,13 +277,43 @@ def _chat_id(ctx: Any, invocation: Any = None, message: Any = None) -> Any:
             except Exception:
                 continue
     return 0
+def _topic_id(ctx: Any, invocation: Any = None, message: Any = None) -> Any:
+    for obj in (ctx, invocation, message):
+        if obj is None:
+            continue
+        try:
+            get = getattr(obj, "get", None)
+        except Exception:
+            get = None
+        if callable(get):
+            for k in ("topic_id", "message_thread_id", "top_msg_id"):
+                try:
+                    v = get(k)
+                except Exception:
+                    continue
+                if isinstance(v, int) and v > 0:
+                    return v
+            continue
+        for k in ("topic_id", "message_thread_id", "top_msg_id"):
+            try:
+                v = getattr(obj, k, None)
+                if callable(v):
+                    continue
+                if isinstance(v, int) and v > 0:
+                    return v
+            except Exception:
+                continue
+    return None
 def _msg_text(message: Any) -> Any:
     if message is None:
         return ""
     get = getattr(message, "get", None)
     if callable(get):
         for k in ("message", "text", "caption", "raw_text"):
-            v = get(k)
+            try:
+                v = get(k)
+            except Exception:
+                continue
             if isinstance(v, str) and v.strip():
                 return v
         return ""
@@ -189,68 +327,197 @@ def _msg_text(message: Any) -> Any:
         except Exception:
             continue
     return ""
-def _load_ids(ctx: Any, key: Any) -> Any:
+def _norm_pair(item: Any) -> Any:
+    seq: Any = item
+    try:
+        if isinstance(item, int) and item:
+            return [int(item), None]
+    except Exception:
+        return None
+    try:
+        if isinstance(item, (list, tuple)) and len(item) == 2:
+            cid = int(seq[0])
+            top = seq[1]
+            top = int(top) if isinstance(top, int) and top > 0 else None
+            if cid:
+                return [cid, top]
+    except Exception:
+        return None
+    return None
+def _load_targets(ctx: Any, key: Any) -> Any:
     try:
         v = ctx.state.get(key, [])
     except Exception:
         return []
     items: Any = v
     if not isinstance(v, list):
-        return []
+        try:
+            one = _norm_pair(v)
+        except Exception:
+            one = None
+        return [one] if one else []
     out: Any = []
     for x in items:
         try:
-            out.append(int(x))
+            pair = _norm_pair(x)
         except Exception:
             continue
+        if pair and pair not in out:
+            out.append(pair)
     return out
-def _save_ids(ctx: Any, key: Any, ids: Any) -> Any:
+def _save_targets(ctx: Any, key: Any, pairs: Any) -> Any:
     try:
-        ctx.state.set(key, [int(x) for x in ids])
+        clean: Any = []
+        for x in pairs or []:
+            try:
+                pair = _norm_pair(x)
+            except Exception:
+                continue
+            if pair and pair not in clean:
+                clean.append(pair)
+        ctx.state.set(key, clean)
     except Exception:
         pass
-def _enabled(ctx: Any, key: Any, cid: Any) -> Any:
+def _target_on(pairs: Any, cid: Any, topic: Any) -> Any:
     try:
-        return int(cid) in _load_ids(ctx, key)
+        cid = int(cid)
     except Exception:
         return False
-async def _set_enabled(ctx: Any, invocation: Any, key: Any, on: Any, label: Any) -> Any:
+    try:
+        topic = int(topic) if isinstance(topic, int) and topic > 0 else None
+    except Exception:
+        topic = None
+    for pair in pairs or []:
+        try:
+            pc, pt = int(pair[0]), pair[1]
+            pt = int(pt) if isinstance(pt, int) and pt > 0 else None
+        except Exception:
+            continue
+        if pc != cid:
+            continue
+        if pt is None or topic is None or pt == topic:
+            return True
+    return False
+def _loc_label(cid: Any, topic: Any) -> Any:
+    try:
+        if isinstance(topic, int) and topic > 0:
+            return "топике <code>" + str(int(cid)) + ":" + str(int(topic)) + "</code>"
+    except Exception:
+        pass
+    return "этом чате"
+async def _set_target(ctx: Any, invocation: Any, key: Any, on: Any, label: Any) -> Any:
     cid = _chat_id(ctx, invocation)
     if not cid:
         await ctx.respond("<b>Не удалось определить чат.</b> Вызови команду из нужного чата.")
         return
-    ids = _load_ids(ctx, key)
-    has = int(cid) in ids
+    topic = _topic_id(ctx, invocation)
+    pairs = _load_targets(ctx, key)
+    has = _target_on(pairs, cid, topic)
     if on and has:
-        await ctx.respond("<b>" + _esc(label) + " уже включено в этом чате.</b>")
+        await ctx.respond("<b>" + _esc(label) + " уже включено в " + _loc_label(cid, topic) + ".</b>")
         return
     if not on and not has:
-        await ctx.respond("<b>" + _esc(label) + " в этом чате не включено.</b>")
+        await ctx.respond("<b>" + _esc(label) + " в " + _loc_label(cid, topic) + " не включено.</b>")
         return
     if on:
-        ids.append(int(cid))
+        pairs.append([int(cid), int(topic) if isinstance(topic, int) and topic > 0 else None])
+        _save_targets(ctx, key, pairs)
     else:
-        ids = [x for x in ids if x != int(cid)]
-    _save_ids(ctx, key, ids)
+        kept: Any = []
+        for pair in pairs:
+            try:
+                pc, pt = int(pair[0]), pair[1]
+                pt = int(pt) if isinstance(pt, int) and pt > 0 else None
+            except Exception:
+                continue
+            if pc != int(cid):
+                kept.append([pc, pt])
+                continue
+            if topic is not None and pt is not None and pt != int(topic):
+                kept.append([pc, pt])
+        _save_targets(ctx, key, kept)
     verb = "включено" if on else "выключено"
-    await ctx.respond("<b>" + _esc(label) + " " + verb + " в этом чате.</b>")
-async def _show_enabled(ctx: Any, key: Any, title: Any, empty: Any) -> Any:
-    ids = _load_ids(ctx, key)
-    if not ids:
+    await ctx.respond("<b>" + _esc(label) + " " + verb + " в " + _loc_label(cid, topic) + ".</b>")
+async def _show_targets(ctx: Any, key: Any, title: Any, empty: Any) -> Any:
+    pairs = _load_targets(ctx, key)
+    if not pairs:
         await ctx.respond("<b>" + _esc(empty) + "</b>")
         return
     lines: Any = ["<b>" + _esc(title) + "</b>"]
-    for c in sorted(set(ids)):
-        lines.append("• <code>" + str(c) + "</code>")
+    for pair in sorted(pairs, key=lambda p: (str(p[0]), str(p[1]))):
+        try:
+            cid, topic = int(pair[0]), pair[1]
+        except Exception:
+            continue
+        if isinstance(topic, int) and topic > 0:
+            lines.append("• <b>Чат</b> → <b>Топик</b> <code>" + str(cid) + ":" + str(topic) + "</code>")
+        else:
+            lines.append("• <b>Чат</b> <code>" + str(cid) + "</code>")
     await ctx.respond("\n".join(lines))
+async def _show_all_targets(ctx: Any) -> Any:
+    found = False
+    lines: Any = ["<b>Все включённые автозагрузки:</b>"]
+    for key, name in (("auto_tt", "TikTok"), ("auto_yt", "YouTube"), ("auto_x", "X/Twitter"), ("auto_ig", "Instagram")):
+        pairs = _load_targets(ctx, key)
+        if not pairs:
+            continue
+        found = True
+        parts: Any = []
+        for pair in sorted(pairs, key=lambda p: (str(p[0]), str(p[1]))):
+            try:
+                cid, topic = int(pair[0]), pair[1]
+            except Exception:
+                continue
+            if isinstance(topic, int) and topic > 0:
+                parts.append("<code>" + str(cid) + ":" + str(topic) + "</code>")
+            else:
+                parts.append("<code>" + str(cid) + "</code>")
+        lines.append("<b>" + _esc(name) + ":</b> " + ", ".join(parts))
+    if not found:
+        await ctx.respond("<b>Автоскачивание нигде не включено.</b>")
+        return
+    await ctx.respond("\n".join(lines))
+def _ru_fix(ctx: Any) -> Any:
+    try:
+        return bool(ctx.state.get("ru_ip_fix", True))
+    except Exception:
+        return True
 async def _shell(ctx: Any, command: Any, timeout: Any = 50) -> Any:
     try:
         timeout = max(1, min(int(timeout), 55))
     except Exception:
         timeout = 50
     return await ctx.cap("shell", {"command": command[:4000], "timeout": timeout})
-def _pick_file(output: Any, audio_only: Any) -> Any:
-    exts = AUDIO_EXTS if audio_only else (VIDEO_EXTS + AUDIO_EXTS)
+def _meta_prints() -> Any:
+    parts: Any = []
+    for key, tmpl in META_PRINTS:
+        parts.append("--print " + _shq("HOTARU:" + key + "=" + tmpl))
+    return " ".join(parts)
+async def _ydl_info(ctx: Any, url: Any) -> Any:
+    cmd = "yt-dlp --skip-download --no-playlist --no-warnings --socket-timeout 15 --retries 2 " + _meta_prints() + " " + _shq(url) + " 2>&1 | tail -n 40"
+    try:
+        res = await _shell(ctx, cmd, 25)
+    except Exception:
+        return None
+    try:
+        out = res.get("output", "") if isinstance(res, dict) else ""
+    except Exception:
+        return None
+    meta: Any = {}
+    for line in str(out).splitlines():
+        t = line.strip()
+        if not t.startswith("HOTARU:"):
+            continue
+        body = t[len("HOTARU:"):]
+        if "=" not in body:
+            continue
+        k, _, v = body.partition("=")
+        if k and k not in meta:
+            meta[k] = v
+    if not meta:
+        return None
+    return meta
+def _pick_file(output: Any, exts: Any) -> Any:
     if not output:
         return None
     cands: Any = []
@@ -259,176 +526,770 @@ def _pick_file(output: Any, audio_only: Any) -> Any:
         if not t:
             continue
         low = t.lower()
-        for e in exts:
-            if low.endswith(e):
-                cands.append(t.split()[-1].strip("'\""))
-                break
+        for e in exts or ():
+            try:
+                if isinstance(e, str) and e and low.endswith(e.casefold()):
+                    cands.append(t.split()[-1].strip("'\""))
+                    break
+            except Exception:
+                continue
     if cands:
         return cands[-1].split("/")[-1].split("\\")[-1]
     return None
-async def _download_one(ctx: Any, url: Any, audio_only: Any, service: Any) -> Any:
-    url = str(url or "")[:1500]
-    if audio_only:
-        fmt = '"bestaudio/best" -x --audio-format mp3'
-        tpl = "au_%(id)s.%(ext)s"
-        doing = "<b>Извлекаю звук…</b>"
-    else:
-        fmt = '"bv*[ext=mp4]+ba[ext=m4a]/b[ext=mp4]/bv*+ba/b" --merge-output-format mp4'
-        tpl = "dl_%(id)s.%(ext)s"
-        doing = "<b>Скачиваю…</b>"
-    await ctx.respond(doing)
-    cmd = "command -v yt-dlp >/dev/null 2>&1 || { echo NO_YTDLP; exit 3; }; " + ("command -v ffmpeg >/dev/null 2>&1 || { echo NO_FFMPEG; }; " if audio_only else "") + "yt-dlp --no-playlist --no-warnings --socket-timeout 20 --retries 3 --max-filesize 100M -f " + fmt + " -o '" + tpl + "' --print after_move:filepath " + _shq(url) + " 2>&1 | tail -n 30"
+async def _up_link(ctx: Any, fname: Any) -> Any:
+    up = await _shell(ctx, "curl -s -m 40 -F 'reqtype=fileupload' -F 'time=72h' -F 'fileToUpload=@" + str(fname) + "' https://litterbox.catbox.moe/resources/internals/api.php", 45)
     try:
-        res = await _shell(ctx, cmd, 50)
-    except Exception as e:
-        await ctx.respond("<b>Shell недоступен:</b> <code>" + _esc(type(e).__name__ + ": " + str(e)[:300]) + "</code>")
-        return
-    try:
-        rc = res.get("returncode", -1)
-        out = res.get("output", "")
+        text = str(up.get("output", "") or "")
     except Exception:
-        rc, out = -1, ""
-    if "NO_YTDLP" in out or rc == 3:
-        await ctx.respond("<b>На сервере нет yt-dlp.</b> Установи yt-dlp и ffmpeg, затем повтори.")
-        return
-    fname = _pick_file(out, audio_only)
-    if not fname:
-        tail = _esc(str(out)[-1200:])
-        await ctx.respond("<b>Не удалось скачать.</b>\n<blockquote expandable>" + tail + "</blockquote>")
-        return
-    await ctx.respond("<b>Заливаю…</b>")
-    up = await _shell(ctx, "curl -s -m 40 -F 'reqtype=fileupload' -F 'time=72h' -F 'fileToUpload=@" + fname + "' https://litterbox.catbox.moe/resources/internals/api.php", 45)
-    text = str(up.get("output", "") or "")
+        return None
     link = ""
     for tok in text.strip().split():
         t = tok.strip().strip("'\"")
         if t.startswith("https://"):
             link = t
+    return link or None
+def _caption(meta: Any, service: Any, url: Any, compact: Any = False) -> Any:
+    try:
+        get = meta.get if hasattr(meta, "get") else None
+    except Exception:
+        get = None
+    def one(*keys: Any) -> Any:
+        for k in keys:
+            try:
+                v = get(k) if callable(get) else None
+            except Exception:
+                continue
+            if v is None:
+                continue
+            s = str(v).strip()
+            if s and s.casefold() != "na":
+                return s
+        return ""
+    label = SVC_LABEL.get(service, "Видео")
+    desc = _clean_desc(one("description"), 900 if service == SVC_X else 700)
+    author = one("uploader", "channel", "artist")
+    ts = one("timestamp")
+    date = _fmt_date(ts) if ts else _fmt_ymd(one("upload_date"))
+    views = _fmt_num(one("view_count", "play_count"))
+    likes = _fmt_num(one("like_count", "digg_count"))
+    comments = _fmt_num(one("comment_count"))
+    shares = _fmt_num(one("repost_count", "share_count"))
+    width, height = one("width"), one("height")
+    res = ""
+    try:
+        if width and height and int(float(str(width))) > 0 and int(float(str(height))) > 0:
+            res = str(int(float(str(width)))) + " × " + str(int(float(str(height))))
+    except Exception:
+        res = ""
+    link = one("webpage_url") or str(url or "")
+    if service == SVC_TT:
+        head = "🎵 TikTok" if not compact else "🎵 TikTok"
+    elif service == SVC_YT:
+        head = "📺 YouTube"
+    elif service == SVC_X:
+        head = "🐦 X/Twitter"
+    elif service == SVC_IG:
+        head = "📷 Instagram"
+    else:
+        head = "🎞 Видео"
+    lines: Any = []
+    if desc:
+        lines.append("<blockquote expandable>" + _esc(desc) + "</blockquote>")
+    if service == SVC_X and not compact:
+        if author:
+            lines.append("👤 <b>Автор:</b> " + _esc(author))
+    else:
+        if author:
+            lines.append("👤 <b>Автор:</b> " + _esc(author))
+    if date and date != "—":
+        lines.append("📅 <b>Дата:</b> " + _esc(date))
+    if not compact:
+        if views != "—":
+            lines.append("❤️ <b>Просмотры:</b> " + _esc(views))
+        if likes != "—":
+            lines.append("👍 <b>Лайки:</b> " + _esc(likes))
+        if comments != "—":
+            lines.append("💬 <b>Комментарии:</b> " + _esc(comments))
+        if shares != "—" and service in (SVC_TT, SVC_X):
+            lines.append("✈️ <b>Пересылки:</b> " + _esc(shares))
+        if res:
+            lines.append("🎞 <b>Разрешение:</b> " + _esc(res))
+    if link:
+        lines.append("🔗 <a href=\"" + _esc(link) + "\">Открыть оригинал</a>")
+    if not lines:
+        lines.append(_esc(link or url or "Медиа"))
+    return head + "\n" + "\n".join(lines)
+def _sound_caption(meta: Any, url: Any) -> Any:
+    track = _track_name(meta)
+    try:
+        get = meta.get if hasattr(meta, "get") else None
+    except Exception:
+        get = None
+    def one(*keys: Any) -> Any:
+        for k in keys:
+            try:
+                v = get(k) if callable(get) else None
+            except Exception:
+                continue
+            if v is None:
+                continue
+            s = str(v).strip()
+            if s and s.casefold() != "na":
+                return s
+        return ""
+    lines: Any = ["🎵 <b>" + _esc(track) + "</b>"]
+    artist = one("uploader", "channel", "artist")
+    if artist and artist != track:
+        lines.append("👤 <b>Исполнитель:</b> " + _esc(artist))
+    ts = one("timestamp")
+    date = _fmt_date(ts) if ts else _fmt_ymd(one("upload_date"))
+    if date != "—":
+        lines.append("📅 <b>Дата:</b> " + _esc(date))
+    link = one("webpage_url") or str(url or "")
+    if link:
+        lines.append("🔗 <a href=\"" + _esc(link) + "\">Открыть оригинал</a>")
+    return "\n".join(lines)
+async def _tikwm(ctx: Any, url: Any) -> Any:
+    body: Any = None
+    for api in ("https://www.tikwm.com/api/", "https://tikwm.com/api/"):
+        try:
+            res = await ctx.net(api, data={"url": str(url), "hd": 1, "count": 12}, timeout=15)
+        except Exception:
+            continue
+        try:
+            body = res.get("body", "") if isinstance(res, dict) else ""
+        except Exception:
+            continue
+        if body and isinstance(body, str) and '"code":0' in body.replace(" ", ""):
+            break
+        body = None
+    if not body:
+        try:
+            res = await ctx.net("https://tikwm.com/api/?url=" + quote(str(url), safe=""), timeout=15)
+        except Exception:
+            res = None
+        try:
+            body = res.get("body", "") if isinstance(res, dict) else ""
+        except Exception:
+            body = None
+    if not body or not isinstance(body, str):
+        return None
+    try:
+        data = json.loads(body)
+    except Exception:
+        return None
+    inner: Any = None
+    try:
+        getd: Any = getattr(data, "get", None)
+        inner = getd("data") if callable(getd) else None
+    except Exception:
+        inner = None
+    if not inner or not hasattr(inner, "get"):
+        return None
+    return inner
+def _tikwm_meta(data: Any, url: Any) -> Any:
+    try:
+        get = data.get if hasattr(data, "get") else None
+    except Exception:
+        get = None
+    def one(*keys: Any) -> Any:
+        for k in keys:
+            try:
+                v = get(k) if callable(get) else None
+            except Exception:
+                continue
+            if v is None:
+                continue
+            s = str(v).strip()
+            if s:
+                return s
+        return ""
+    author: Any = ""
+    try:
+        au = get("author") if callable(get) else None
+        getau: Any = getattr(au, "get", None)
+        author = getau("nickname") if callable(getau) else ""
+    except Exception:
+        author = ""
+    meta: Any = {
+        "title": one("title"),
+        "description": one("title"),
+        "uploader": author,
+        "timestamp": one("create_time"),
+        "view_count": one("play_count"),
+        "like_count": one("digg_count"),
+        "comment_count": one("comment_count"),
+        "share_count": one("share_count"),
+        "width": one("width"),
+        "height": one("height"),
+        "webpage_url": str(url or ""),
+    }
+    return meta
+def _tikwm_play(data: Any) -> Any:
+    for key in ("hdplay", "play", "wmplay"):
+        try:
+            get = data.get if hasattr(data, "get") else None
+            v = get(key) if callable(get) else None
+        except Exception:
+            continue
+        if isinstance(v, str) and v.startswith("http"):
+            return v
+    return None
+def _tikwm_images(data: Any) -> Any:
+    out: Any = []
+    try:
+        get = data.get if hasattr(data, "get") else None
+        imgs = get("images") if callable(get) else None
+    except Exception:
+        return out
+    items: Any = imgs
+    if not isinstance(imgs, list):
+        return out
+    for item in items:
+        try:
+            if isinstance(item, str) and item.startswith("http"):
+                out.append(item)
+                continue
+            geti: Any = getattr(item, "get", None)
+            if not callable(geti):
+                continue
+            for k in ("url", "src", "download_url"):
+                try:
+                    v = geti(k)
+                except Exception:
+                    continue
+                if isinstance(v, str) and v.startswith("http"):
+                    out.append(v)
+                    break
+        except Exception:
+            continue
+        if len(out) >= 10:
+            break
+    return out
+async def _curl_dl(ctx: Any, url: Any, fname: Any, timeout: Any = 45) -> Any:
+    try:
+        res = await _shell(ctx, "curl -sL --max-time " + str(int(timeout) - 5) + " -o " + _shq(fname) + " " + _shq(url) + " 2>&1 | tail -n 5", timeout)
+    except Exception:
+        return False
+    try:
+        names = await ctx.cap("files", {"op": "list"})
+    except Exception:
+        return False
+    items: Any = names
+    if not isinstance(names, list):
+        return False
+    for n in items:
+        try:
+            if isinstance(n, str) and n == str(fname):
+                return True
+        except Exception:
+            continue
+    return False
+async def _dl_video(ctx: Any, url: Any, audio_only: Any, tpl: Any) -> Any:
+    if audio_only:
+        fmt = '"bestaudio/best" -x --audio-format mp3'
+    else:
+        fmt = '"bv*[ext=mp4]+ba[ext=m4a]/b[ext=mp4]/bv*+ba/b" --merge-output-format mp4'
+    cmd = "yt-dlp --no-playlist --no-warnings --socket-timeout 20 --retries 3 --max-filesize 100M -f " + fmt + " -o '" + str(tpl) + "' --print after_move:filepath " + _shq(url) + " 2>&1 | tail -n 30"
+    try:
+        res = await _shell(ctx, cmd, 50)
+    except Exception as e:
+        return None, {}, "shell:" + _esc(type(e).__name__ + ": " + str(e)[:200])
+    rc = None
+    out = ""
+    try:
+        rc = res.get("returncode") if isinstance(res, dict) else -1
+        out = res.get("output", "") if isinstance(res, dict) else ""
+    except Exception:
+        return None, {}, "readout"
+    if "NO_YTDLP" in str(out) or rc == 3:
+        return None, {}, "noytdlp"
+    fname = _pick_file(out, VIDEO_EXTS + AUDIO_EXTS)
+    if not fname:
+        return None, {}, str(out)[-1200:]
+    return fname, {}, ""
+async def _dl_album(ctx: Any, urls: Any, service: Any) -> Any:
+    items: Any = []
+    try:
+        for u in urls or []:
+            if isinstance(u, str) and u.startswith("http") and len(items) < 10:
+                items.append(u)
+    except Exception:
+        return []
+    if not items:
+        return []
+    parts: Any = ["i=0"]
+    for u in items:
+        parts.append("i=$((i+1)); f=\"img_${i}.jpg\"; curl -sL --max-time 20 -o \"$f\" " + _shq(u) + " && curl -s -m 20 -F 'reqtype=fileupload' -F 'time=72h' -F \"fileToUpload=@$f\" https://litterbox.catbox.moe/resources/internals/api.php && echo")
+    cmd = "for u in " + " ".join([_shq(u) for u in items]) + "; do :; done; " + " ; ".join(parts)
+    try:
+        res = await _shell(ctx, cmd, 55)
+    except Exception:
+        return []
+    try:
+        out = res.get("output", "") if isinstance(res, dict) else ""
+    except Exception:
+        return []
+    links: Any = []
+    for tok in str(out).strip().split():
+        t = tok.strip().strip("'\"")
+        if t.startswith("https://litter.catbox.moe/") and t not in links:
+            links.append(t)
+    return links
+async def _send_links(ctx: Any, service: Any, meta: Any, url: Any, links: Any, compact: Any = False) -> Any:
+    items: Any = []
+    try:
+        for u in links or []:
+            if isinstance(u, str) and u.startswith("https://") and u not in items:
+                items.append(u)
+    except Exception:
+        return
+    if not items:
+        return
+    if len(items) == 1:
+        text = _caption(meta, service, url, compact)
+        await ctx.respond(text + "\n<a href=\"" + _esc(items[0]) + "\">Скачать файл</a> <i>(доступен 72 часа)</i>", parse_mode="HTML")
+        return
+    lines: Any = [_caption(meta, service, url, True)]
+    n = 0
+    for u in items:
+        n = n + 1
+        lines.append(str(n) + ". <a href=\"" + _esc(u) + "\">Файл " + str(n) + "</a>")
+    lines.append("<i>Файлы доступны 72 часа</i>")
+    await ctx.respond("\n".join(lines), parse_mode="HTML")
+async def _tiktok_flow(ctx: Any, url: Any, invocation: Any, audio_only: Any, compact: Any = False) -> Any:
+    await ctx.respond("<b>Скачиваю…</b>" if not audio_only else "<b>Извлекаю звук…</b>")
+    short = _is_tiktok_short(url)
+    fix = _ru_fix(ctx)
+    tried_ydl = False
+    if not (fix and short):
+        tried_ydl = True
+        fname, _, fail = await _dl_video(ctx, url, audio_only, "au_%(id)s.%(ext)s" if audio_only else "dl_%(id)s.%(ext)s")
+        if fname:
+            meta = await _ydl_info(ctx, url)
+            if audio_only:
+                await _send_audio_link(ctx, url, fname)
+            else:
+                link = await _up_link(ctx, fname)
+                if link:
+                    await _send_links(ctx, SVC_TT, meta or {}, url, [link], compact)
+                    return
+                await ctx.respond("<b>Не удалось залить.</b>")
+                return
+    data = await _tikwm(ctx, url)
+    if data:
+        if not audio_only:
+            play = _tikwm_play(data)
+            if play:
+                fname = "tk_dl.mp4"
+                if await _curl_dl(ctx, play, fname):
+                    meta = _tikwm_meta(data, url)
+                    link = await _up_link(ctx, fname)
+                    if link:
+                        await _send_links(ctx, SVC_TT, meta, url, [link], compact)
+                        return
+        else:
+            play = _tikwm_play(data)
+            if play:
+                fname = "tk_au.mp4"
+                if await _curl_dl(ctx, play, fname):
+                    if await _to_mp3(ctx, fname):
+                        link = await _up_link(ctx, "tk_au.mp3")
+                        if link:
+                            await _send_audio_link(ctx, url, "tk_au.mp3", _tikwm_meta(data, url))
+                            return
+        imgs = _tikwm_images(data)
+        if imgs and not audio_only:
+            links = await _dl_album(ctx, imgs, SVC_TT)
+            if links:
+                await _send_links(ctx, SVC_TT, _tikwm_meta(data, url), url, links, compact)
+                return
+    if tried_ydl:
+        await ctx.respond("<b>Не удалось скачать.</b>")
+        return
+    fname, _, fail = await _dl_video(ctx, url, audio_only, "au_%(id)s.%(ext)s" if audio_only else "dl_%(id)s.%(ext)s")
+    if fname:
+        if audio_only:
+            await _send_audio_link(ctx, url, fname)
+        else:
+            link = await _up_link(ctx, fname)
+            if link:
+                await _send_links(ctx, SVC_TT, await _ydl_info(ctx, url) or {}, url, [link], compact)
+                return
+            await ctx.respond("<b>Не удалось залить.</b>")
+            return
+    await ctx.respond("<b>Не удалось скачать.</b>")
+async def _to_mp3(ctx: Any, fname: Any) -> Any:
+    try:
+        res = await _shell(ctx, "command -v ffmpeg >/dev/null 2>&1 || { echo NO_FFMPEG; }; ffmpeg -y -v error -i " + _shq(fname) + " -vn -c:a libmp3lame -b:a 192k tk_au.mp3 2>&1 | tail -n 5", 50)
+    except Exception:
+        return False
+    try:
+        out = res.get("output", "") if isinstance(res, dict) else ""
+    except Exception:
+        return False
+    if "NO_FFMPEG" in str(out):
+        return False
+    try:
+        names = await ctx.cap("files", {"op": "list"})
+    except Exception:
+        return False
+    items: Any = names
+    if not isinstance(names, list):
+        return False
+    for n in items:
+        try:
+            if isinstance(n, str) and n == "tk_au.mp3":
+                return True
+        except Exception:
+            continue
+    return False
+async def _send_audio_link(ctx: Any, url: Any, fname: Any, meta: Any = None) -> Any:
+    link = await _up_link(ctx, fname)
     if not link:
-        tail = _esc(text[-1200:])
-        await ctx.respond("<b>Не удалось залить.</b>\n<blockquote expandable>" + tail + "</blockquote>")
+        await ctx.respond("<b>Не удалось залить.</b>")
         return
-    label = {"tt": "TikTok", "yt": "YouTube", "x": "X/Twitter", "ig": "Instagram"}.get(service, "Видео")
-    await ctx.respond("<b>" + _esc(label) + "</b>\n<a href=\"" + _esc(link) + "\">Скачать файл</a> <i>(доступен 72 часа)</i>\n<a href=\"" + _esc(url) + "\">Открыть оригинал</a>")
+    text = _sound_caption(meta or {}, url)
+    await ctx.respond(text + "\n<a href=\"" + _esc(link) + "\">Скачать аудио</a> <i>(доступен 72 часа)</i>", parse_mode="HTML")
+async def _generic_flow(ctx: Any, url: Any, invocation: Any, service: Any, compact: Any = False) -> Any:
+    await ctx.respond("<b>Скачиваю…</b>")
+    if service == SVC_YT:
+        check = _is_youtube_url(url)
+        bad = "<b>Не удалось распознать ссылку на YouTube.</b>"
+    elif service == SVC_X:
+        check = _is_x_url(url)
+        bad = "<b>Не удалось распознать ссылку на X/Twitter.</b>"
+    elif service == SVC_IG:
+        check = _is_instagram_url(url)
+        bad = "<b>Не удалось распознать ссылку на Instagram.</b>"
+    else:
+        check = False
+        bad = "<b>Не удалось распознать ссылку.</b>"
+    if not check:
+        await ctx.respond(bad)
+        return
+    if service == SVC_IG:
+        meta = await _ydl_info(ctx, url)
+        raw_entries: Any = None
+        try:
+            getm: Any = getattr(meta, "get", None)
+            raw_entries = getm("entries") if callable(getm) else None
+        except Exception:
+            raw_entries = None
+        items: Any = raw_entries
+        if isinstance(raw_entries, list) and raw_entries:
+            urls: Any = []
+            for e in items:
+                try:
+                    get = e.get if hasattr(e, "get") else None
+                    u = get("url") if callable(get) else None
+                except Exception:
+                    continue
+                if isinstance(u, str) and u.startswith("http") and len(urls) < 10:
+                    urls.append(u)
+            if urls:
+                links = await _dl_album(ctx, urls, service)
+                if links:
+                    await _send_links(ctx, service, meta or {}, url, links, compact)
+                    return
+                await ctx.respond("<b>Не удалось скачать.</b>")
+                return
+    fname, _, fail = await _dl_video(ctx, url, False, "dl_%(id)s.%(ext)s")
+    if not fname:
+        if fail == "noytdlp":
+            await ctx.respond("<b>На сервере нет yt-dlp.</b> Установи yt-dlp и ffmpeg, затем повтори.")
+        elif fail and fail not in ("readout", "shell:asyncio.TimeoutError", "shell:TimeoutError"):
+            tail = _esc(str(fail)[-1200:])
+            await ctx.respond("<b>Не удалось скачать.</b>\n<blockquote expandable>" + tail + "</blockquote>")
+        else:
+            await ctx.respond("<b>Не удалось скачать.</b>")
+        return
+    meta = await _ydl_info(ctx, url)
+    if service == SVC_X and meta:
+        try:
+            text_only = not meta.get("entries") and not one_of(meta, "width")
+        except Exception:
+            text_only = False
+    else:
+        text_only = False
+    link = await _up_link(ctx, fname)
+    if not link:
+        await ctx.respond("<b>Не удалось залить.</b>")
+        return
+    if text_only:
+        await ctx.respond(_caption(meta or {}, service, url, True), parse_mode="HTML")
+        return
+    await _send_links(ctx, service, meta or {}, url, [link], compact)
+def one_of(meta: Any, *keys: Any) -> Any:
+    for k in keys:
+        try:
+            v = meta.get(k) if hasattr(meta, "get") else None
+        except Exception:
+            continue
+        if v is not None and str(v).strip() and str(v).strip().casefold() != "na":
+            return v
+    return None
+async def _stat_flow(ctx: Any, url: Any, invocation: Any) -> Any:
+    await ctx.respond("<b>Диагностика / Получаю информацию…</b>")
+    t0 = 0.0
+    try:
+        t0 = time.time()
+    except Exception:
+        t0 = 0.0
+    meta = await _ydl_info(ctx, url)
+    t1 = 0.0
+    try:
+        t1 = time.time()
+    except Exception:
+        t1 = 0.0
+    if not meta:
+        await ctx.respond("<b>Не удалось получить информацию.</b>")
+        return
+    ext = ""
+    try:
+        ext = str(meta.get("extractor") or "")
+    except Exception:
+        ext = ""
+    lines: Any = ["<b>Диагностика завершена</b>"]
+    lines.append("🧩 <b>Платформа:</b> " + _esc(ext or "—"))
+    res = ""
+    try:
+        w, h = meta.get("width"), meta.get("height")
+        if w and h:
+            res = str(w) + " × " + str(h)
+    except Exception:
+        res = ""
+    if res:
+        lines.append("🎞 <b>Разрешение:</b> " + _esc(res))
+    try:
+        size = meta.get("filesize") or meta.get("filesize_approx")
+    except Exception:
+        size = None
+    lines.append("💾 <b>Размер:</b> " + _esc(_fmt_size(size)))
+    try:
+        dur = meta.get("duration")
+    except Exception:
+        dur = None
+    lines.append("⏱ <b>Длительность:</b> " + _esc(_fmt_dur(dur)))
+    try:
+        el = (t1 - t0) if t0 and t1 else 0.0
+    except Exception:
+        el = 0.0
+    lines.append("⚡ <b>Получение метаданных:</b> " + _esc(f"{el:.1f} c"))
+    lines.append("")
+    lines.append(_caption(meta, "yt" if ext.casefold() in ("youtube",) else "tt" if "tiktok" in ext.casefold() else "ig" if "instagram" in ext.casefold() else "x", url, False))
+    await ctx.respond("\n".join(lines), parse_mode="HTML")
+async def _ytdlp_flow(ctx: Any, invocation: Any, update: Any = False) -> Any:
+    try:
+        res = await _shell(ctx, "yt-dlp --version 2>&1 | head -n 3; echo ---; command -v deno || command -v node || echo NO_JS", 20)
+    except Exception as e:
+        await ctx.respond("<b>Не удалось проверить yt-dlp:</b> <code>" + _esc(type(e).__name__) + "</code>")
+        return
+    try:
+        out = res.get("output", "") if isinstance(res, dict) else ""
+    except Exception:
+        out = ""
+    cur = ""
+    for line in str(out).splitlines():
+        t = line.strip()
+        if t and t != "---" and not t.startswith("NO_JS") and "command -v" not in t:
+            if not cur and re.match(r"^\d{4}\.\d{1,2}\.", t):
+                cur = t
+    no_js = "NO_JS" in str(out)
+    latest = ""
+    try:
+        res2 = await ctx.net("https://pypi.org/pypi/yt-dlp/json", timeout=12)
+    except Exception:
+        res2 = None
+    try:
+        body = res2.get("body", "") if isinstance(res2, dict) else ""
+        data = json.loads(body) if isinstance(body, str) and body else None
+        getd: Any = getattr(data, "get", None)
+        info = getd("info") if callable(getd) else None
+        geti: Any = getattr(info, "get", None)
+        latest = str(geti("version")) if callable(geti) else ""
+    except Exception:
+        latest = ""
+    if not update:
+        text = "<b>yt-dlp</b>\nТекущая: <code>" + _esc(cur or "?") + "</code>\nНовейшая: <code>" + _esc(latest or "?") + "</code>\nJS-движок: " + _esc("нет (нужен deno/node для YouTube)" if no_js else "есть")
+        if latest and cur and latest != cur:
+            text = text + "\nОбновить: <code>" + _esc(_prefix(ctx)) + "ytdlp update</code>"
+        await ctx.respond(text)
+        return
+    await ctx.respond("<b>Обновляю yt-dlp…</b>")
+    try:
+        res3 = await _shell(ctx, "python3 -m pip install --disable-pip-version-check --no-input -U yt-dlp 2>&1 | tail -n 5", 55)
+    except Exception as e:
+        await ctx.respond("<b>Не удалось обновить:</b> <code>" + _esc(type(e).__name__) + "</code>")
+        return
+    try:
+        out3 = res3.get("output", "") if isinstance(res3, dict) else ""
+    except Exception:
+        out3 = ""
+    await ctx.respond("<b>Готово.</b>\n<blockquote expandable>" + _esc(str(out3)[-1200:]) + "</blockquote>")
+async def _autoconfigure(ctx: Any, invocation: Any) -> Any:
+    lines: Any = ["<b>Управление автоскачиванием</b>", ""]
+    for key, name in (("auto_tt", "🎵 TikTok"), ("auto_yt", "📺 YouTube"), ("auto_x", "🐦 X/Twitter"), ("auto_ig", "📷 Instagram")):
+        pairs = _load_targets(ctx, key)
+        if pairs:
+            parts: Any = []
+            for pair in pairs:
+                try:
+                    cid, topic = int(pair[0]), pair[1]
+                except Exception:
+                    continue
+                if isinstance(topic, int) and topic > 0:
+                    parts.append("<code>" + str(cid) + ":" + str(topic) + "</code>")
+                else:
+                    parts.append("<code>" + str(cid) + "</code>")
+            lines.append("<b>" + _esc(name) + ":</b> " + ", ".join(parts))
+        else:
+            lines.append("<b>" + _esc(name) + ":</b> выключено везде")
+    p = _prefix(ctx)
+    lines.append("")
+    lines.append("Включи командой <code>" + _esc(p) + "ttenable</code> (TikTok), <code>" + _esc(p) + "ytenable</code>, <code>" + _esc(p) + "xenable</code>, <code>" + _esc(p) + "igenable</code> из нужного чата или топика.")
+    lines.append("Выключить всё: <code>" + _esc(p) + "alldisable</code>.")
+    await ctx.respond("\n".join(lines))
 async def command_tt(ctx: Any, invocation: Any) -> Any:
-    p = _prefix(ctx)
     url = await _input_url(ctx, invocation)
     if not url:
-        await ctx.respond("<b>Использование:</b> <code>" + _esc(p) + "tt &lt;ссылка&gt;</code>")
+        await ctx.respond("<b>Использование:</b> <code>" + _esc(_prefix(ctx)) + "tt &lt;ссылка&gt;</code>")
         return
     if not _is_tiktok_url(url):
         await ctx.respond("<b>Не удалось распознать ссылку на TikTok.</b>")
         return
-    await _download_one(ctx, url, False, "tt")
+    await _tiktok_flow(ctx, url, invocation, False)
 async def command_ttsound(ctx: Any, invocation: Any) -> Any:
-    p = _prefix(ctx)
     url = await _input_url(ctx, invocation)
     if not url:
-        await ctx.respond("<b>Использование:</b> <code>" + _esc(p) + "ttsound &lt;ссылка&gt;</code>")
+        await ctx.respond("<b>Использование:</b> <code>" + _esc(_prefix(ctx)) + "ttsound &lt;ссылка&gt;</code>")
         return
     if not _is_tiktok_url(url):
         await ctx.respond("<b>Не удалось распознать ссылку на TikTok.</b>")
         return
-    await _download_one(ctx, url, True, "tt")
+    await _tiktok_flow(ctx, url, invocation, True)
 async def command_yt(ctx: Any, invocation: Any) -> Any:
-    p = _prefix(ctx)
     url = await _input_url(ctx, invocation)
     if not url:
-        await ctx.respond("<b>Использование:</b> <code>" + _esc(p) + "yt &lt;ссылка YouTube&gt;</code>")
+        await ctx.respond("<b>Использование:</b> <code>" + _esc(_prefix(ctx)) + "yt &lt;ссылка YouTube&gt;</code>")
         return
-    if not _is_youtube_url(url):
-        await ctx.respond("<b>Не удалось распознать ссылку на YouTube.</b>")
+    await _generic_flow(ctx, url, invocation, SVC_YT)
+async def command_stat(ctx: Any, invocation: Any) -> Any:
+    url = await _input_url(ctx, invocation)
+    if not url:
+        await ctx.respond("<b>Использование:</b> <code>" + _esc(_prefix(ctx)) + "stat &lt;ссылка&gt;</code>")
         return
-    await _download_one(ctx, url, False, "yt")
+    await _stat_flow(ctx, url, invocation)
+async def command_ytstat(ctx: Any, invocation: Any) -> Any:
+    await command_stat(ctx, invocation)
+async def command_ytdlp(ctx: Any, invocation: Any) -> Any:
+    update = False
+    try:
+        args = getattr(invocation, "args", ()) or ()
+        update = any(str(a).casefold() == "update" for a in args)
+    except Exception:
+        update = False
+    await _ytdlp_flow(ctx, invocation, update)
 async def command_x(ctx: Any, invocation: Any) -> Any:
-    p = _prefix(ctx)
     url = await _input_url(ctx, invocation)
     if not url:
-        await ctx.respond("<b>Использование:</b> <code>" + _esc(p) + "x &lt;ссылка X/Twitter&gt;</code>")
+        await ctx.respond("<b>Использование:</b> <code>" + _esc(_prefix(ctx)) + "x &lt;ссылка X/Twitter&gt;</code>")
         return
-    if not _is_x_url(url):
-        await ctx.respond("<b>Не удалось распознать ссылку на X/Twitter.</b>")
-        return
-    await _download_one(ctx, url, False, "x")
+    await _generic_flow(ctx, url, invocation, SVC_X)
+async def command_twitter(ctx: Any, invocation: Any) -> Any:
+    await command_x(ctx, invocation)
 async def command_ig(ctx: Any, invocation: Any) -> Any:
-    p = _prefix(ctx)
     url = await _input_url(ctx, invocation)
     if not url:
-        await ctx.respond("<b>Использование:</b> <code>" + _esc(p) + "ig &lt;ссылка Instagram&gt;</code>")
+        await ctx.respond("<b>Использование:</b> <code>" + _esc(_prefix(ctx)) + "ig &lt;ссылка Instagram&gt;</code>")
         return
-    if not _is_instagram_url(url):
-        await ctx.respond("<b>Не удалось распознать ссылку на Instagram.</b>")
-        return
-    await _download_one(ctx, url, False, "ig")
+    await _generic_flow(ctx, url, invocation, SVC_IG)
+async def command_inst(ctx: Any, invocation: Any) -> Any:
+    await command_ig(ctx, invocation)
+async def command_instagram(ctx: Any, invocation: Any) -> Any:
+    await command_ig(ctx, invocation)
 async def command_ttenable(ctx: Any, invocation: Any) -> Any:
     _ = invocation
-    await _set_enabled(ctx, invocation, "auto_tt", True, "Автоскачивание TikTok")
+    await _set_target(ctx, invocation, "auto_tt", True, "Автоскачивание TikTok")
 async def command_ttdisable(ctx: Any, invocation: Any) -> Any:
     _ = invocation
-    await _set_enabled(ctx, invocation, "auto_tt", False, "Автоскачивание TikTok")
+    await _set_target(ctx, invocation, "auto_tt", False, "Автоскачивание TikTok")
 async def command_ttchats(ctx: Any, invocation: Any) -> Any:
     _ = invocation
-    await _show_enabled(ctx, "auto_tt", "Авто-TikTok:", "Автоскачивание TikTok нигде не включено.")
+    await _show_targets(ctx, "auto_tt", "Авто-TikTok:", "Автоскачивание TikTok нигде не включено.")
 async def command_ytenable(ctx: Any, invocation: Any) -> Any:
     _ = invocation
-    await _set_enabled(ctx, invocation, "auto_yt", True, "Автоскачивание YouTube")
+    await _set_target(ctx, invocation, "auto_yt", True, "Автоскачивание YouTube")
 async def command_ytdisable(ctx: Any, invocation: Any) -> Any:
     _ = invocation
-    await _set_enabled(ctx, invocation, "auto_yt", False, "Автоскачивание YouTube")
+    await _set_target(ctx, invocation, "auto_yt", False, "Автоскачивание YouTube")
 async def command_ytchats(ctx: Any, invocation: Any) -> Any:
     _ = invocation
-    await _show_enabled(ctx, "auto_yt", "Авто-YouTube:", "Автоскачивание YouTube нигде не включено.")
+    await _show_targets(ctx, "auto_yt", "Авто-YouTube:", "Автоскачивание YouTube нигде не включено.")
 async def command_xenable(ctx: Any, invocation: Any) -> Any:
     _ = invocation
-    await _set_enabled(ctx, invocation, "auto_x", True, "Автоскачивание X/Twitter")
+    await _set_target(ctx, invocation, "auto_x", True, "Автоскачивание X/Twitter")
 async def command_xdisable(ctx: Any, invocation: Any) -> Any:
     _ = invocation
-    await _set_enabled(ctx, invocation, "auto_x", False, "Автоскачивание X/Twitter")
+    await _set_target(ctx, invocation, "auto_x", False, "Автоскачивание X/Twitter")
 async def command_xchats(ctx: Any, invocation: Any) -> Any:
     _ = invocation
-    await _show_enabled(ctx, "auto_x", "Авто-X:", "Автоскачивание X нигде не включено.")
+    await _show_targets(ctx, "auto_x", "Авто-X:", "Автоскачивание X нигде не включено.")
 async def command_igenable(ctx: Any, invocation: Any) -> Any:
     _ = invocation
-    await _set_enabled(ctx, invocation, "auto_ig", True, "Автоскачивание Instagram")
+    await _set_target(ctx, invocation, "auto_ig", True, "Автоскачивание Instagram")
 async def command_igdisable(ctx: Any, invocation: Any) -> Any:
     _ = invocation
-    await _set_enabled(ctx, invocation, "auto_ig", False, "Автоскачивание Instagram")
+    await _set_target(ctx, invocation, "auto_ig", False, "Автоскачивание Instagram")
 async def command_igchats(ctx: Any, invocation: Any) -> Any:
     _ = invocation
-    await _show_enabled(ctx, "auto_ig", "Авто-Instagram:", "Автоскачивание Instagram нигде не включено.")
+    await _show_targets(ctx, "auto_ig", "Авто-Instagram:", "Автоскачивание Instagram нигде не включено.")
 async def command_allenable(ctx: Any, invocation: Any) -> Any:
+    _ = invocation
     cid = _chat_id(ctx, invocation)
     if not cid:
         await ctx.respond("<b>Не удалось определить чат.</b>")
         return
+    topic = _topic_id(ctx, invocation)
+    pair = [int(cid), int(topic) if isinstance(topic, int) and topic > 0 else None]
     for k in ("auto_tt", "auto_yt", "auto_x", "auto_ig"):
-        ids = _load_ids(ctx, k)
-        if int(cid) not in ids:
-            ids.append(int(cid))
-            _save_ids(ctx, k, ids)
+        pairs = _load_targets(ctx, k)
+        if not _target_on(pairs, cid, topic):
+            pairs.append(pair)
+            _save_targets(ctx, k, pairs)
     await ctx.respond("<b>Автоскачивание всех сервисов включено в этом чате.</b>")
 async def command_alldisable(ctx: Any, invocation: Any) -> Any:
+    _ = invocation
     cid = _chat_id(ctx, invocation)
     if not cid:
         await ctx.respond("<b>Не удалось определить чат.</b>")
         return
+    topic = _topic_id(ctx, invocation)
     for k in ("auto_tt", "auto_yt", "auto_x", "auto_ig"):
-        ids = [x for x in _load_ids(ctx, k) if x != int(cid)]
-        _save_ids(ctx, k, ids)
+        pairs = _load_targets(ctx, k)
+        kept: Any = []
+        for pair in pairs:
+            try:
+                pc, pt = int(pair[0]), pair[1]
+                pt = int(pt) if isinstance(pt, int) and pt > 0 else None
+            except Exception:
+                continue
+            if pc != int(cid):
+                kept.append([pc, pt])
+                continue
+            if topic is not None and pt is not None and pt != int(topic):
+                kept.append([pc, pt])
+        _save_targets(ctx, k, kept)
     await ctx.respond("<b>Все автоскачивания выключены в этом чате.</b>")
 async def command_allchats(ctx: Any, invocation: Any) -> Any:
     _ = invocation
-    lines: Any = ["<b>Все включённые автозагрузки:</b>"]
-    any_on = False
-    for k, t in (("auto_tt", "TikTok"), ("auto_yt", "YouTube"), ("auto_x", "X"), ("auto_ig", "Instagram")):
-        ids = _load_ids(ctx, k)
-        if ids:
-            any_on = True
-            lines.append("<b>" + _esc(t) + ":</b> " + ", ".join("<code>" + str(c) + "</code>" for c in sorted(set(ids))))
-    if not any_on:
-        await ctx.respond("<b>Автоскачивание нигде не включено.</b>")
-        return
-    await ctx.respond("\n".join(lines))
+    await _show_all_targets(ctx)
+async def command_autoconfigure(ctx: Any, invocation: Any) -> Any:
+    _ = invocation
+    await _autoconfigure(ctx, invocation)
+async def command_autoconfig(ctx: Any, invocation: Any) -> Any:
+    _ = invocation
+    await _autoconfigure(ctx, invocation)
 async def watcher_autodl(ctx: Any, message: Any) -> Any:
     try:
         cid = _chat_id(ctx, message)
@@ -472,11 +1333,19 @@ async def watcher_autodl(ctx: Any, message: Any) -> Any:
         svc, url = _find_any(t)
         if not url:
             return
-        key = {"tt": "auto_tt", "yt": "auto_yt", "x": "auto_x", "ig": "auto_ig"}.get(svc)
+        key = SVC_KEY.get(svc, "")
         if not key:
             return
-        if not _enabled(ctx, key, cid):
+        topic = _topic_id(ctx, message)
+        if not _target_on(_load_targets(ctx, key), cid, topic):
             return
-        await _download_one(ctx, url, False, svc)
+        if svc == SVC_TT:
+            await _tiktok_flow(ctx, url, None, False, True)
+        elif svc == SVC_YT:
+            await _generic_flow(ctx, url, None, SVC_YT, True)
+        elif svc == SVC_X:
+            await _generic_flow(ctx, url, None, SVC_X, True)
+        elif svc == SVC_IG:
+            await _generic_flow(ctx, url, None, SVC_IG, True)
     except Exception:
         return
