@@ -1,6 +1,6 @@
 HOTARU = {
     "id": "tiktokdownloader",
-    "version": "2.0.0",
+    "version": "2.0.1",
     "commands": ["tt", "ttsound", "yt", "stat", "ytstat", "ytdlp", "x", "twitter", "ig", "inst", "instagram", "ttenable", "ttdisable", "ttchats", "ytenable", "ytdisable", "ytchats", "xenable", "xdisable", "xchats", "igenable", "igdisable", "igchats", "allenable", "alldisable", "allchats", "autoconfigure", "autoconfig"],
     "capabilities": ["state", "files", "shell"],
     "watchers": ["autodl"],
