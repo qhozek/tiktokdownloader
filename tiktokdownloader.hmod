@@ -47,13 +47,6 @@ def _esc(v: Any) -> Any:
     return html.escape(str(v), quote=False)
 def _shq(s: Any) -> Any:
     return "'" + str(s).replace("'", "'\"'\"'") + "'"
-def _nn(v: Any) -> Any:
-    if v is None:
-        return None
-    s = str(v).strip()
-    if not s or s.casefold() == "na":
-        return None
-    return s
 def _fmt_num(v: Any) -> Any:
     try:
         n = int(str(v).replace(" ", "").replace(",", ""))
@@ -234,8 +227,12 @@ async def _reply_text(ctx: Any) -> Any:
     return ""
 async def _input_url(ctx: Any, invocation: Any) -> Any:
     parts: Any = []
+    args: Any = ()
     try:
-        args = getattr(invocation, "args", ()) or ()
+        args = getattr(invocation, "args", ())
+    except Exception:
+        args = ()
+    try:
         if args:
             parts.append(" ".join(str(a) for a in args))
     except Exception:
@@ -329,20 +326,26 @@ def _msg_text(message: Any) -> Any:
     return ""
 def _norm_pair(item: Any) -> Any:
     seq: Any = item
+    if not isinstance(item, (list, tuple)):
+        try:
+            if isinstance(item, int) and item:
+                return [int(item), None]
+        except Exception:
+            pass
+        return None
     try:
-        if isinstance(item, int) and item:
-            return [int(item), None]
+        if seq[2:3]:
+            return None
+        cid = int(seq[0])
+        top = seq[1]
     except Exception:
         return None
     try:
-        if isinstance(item, (list, tuple)) and len(item) == 2:
-            cid = int(seq[0])
-            top = seq[1]
-            top = int(top) if isinstance(top, int) and top > 0 else None
-            if cid:
-                return [cid, top]
+        top = int(top) if isinstance(top, int) and top > 0 else None
     except Exception:
-        return None
+        top = None
+    if cid:
+        return [cid, top]
     return None
 def _load_targets(ctx: Any, key: Any) -> Any:
     try:
@@ -366,9 +369,12 @@ def _load_targets(ctx: Any, key: Any) -> Any:
             out.append(pair)
     return out
 def _save_targets(ctx: Any, key: Any, pairs: Any) -> Any:
+    seq: Any = pairs
+    if not isinstance(pairs, list):
+        return
     try:
         clean: Any = []
-        for x in pairs or []:
+        for x in seq:
             try:
                 pair = _norm_pair(x)
             except Exception:
@@ -387,7 +393,10 @@ def _target_on(pairs: Any, cid: Any, topic: Any) -> Any:
         topic = int(topic) if isinstance(topic, int) and topic > 0 else None
     except Exception:
         topic = None
-    for pair in pairs or []:
+    seq: Any = pairs
+    if not isinstance(pairs, list):
+        return False
+    for pair in seq:
         try:
             pc, pt = int(pair[0]), pair[1]
             pt = int(pt) if isinstance(pt, int) and pt > 0 else None
@@ -444,7 +453,7 @@ async def _show_targets(ctx: Any, key: Any, title: Any, empty: Any) -> Any:
         await ctx.respond("<b>" + _esc(empty) + "</b>")
         return
     lines: Any = ["<b>" + _esc(title) + "</b>"]
-    for pair in sorted(pairs, key=lambda p: (str(p[0]), str(p[1]))):
+    for pair in sorted(pairs, key=str):
         try:
             cid, topic = int(pair[0]), pair[1]
         except Exception:
@@ -463,7 +472,7 @@ async def _show_all_targets(ctx: Any) -> Any:
             continue
         found = True
         parts: Any = []
-        for pair in sorted(pairs, key=lambda p: (str(p[0]), str(p[1]))):
+        for pair in sorted(pairs, key=str):
             try:
                 cid, topic = int(pair[0]), pair[1]
             except Exception:
@@ -499,8 +508,11 @@ async def _ydl_info(ctx: Any, url: Any) -> Any:
         res = await _shell(ctx, cmd, 25)
     except Exception:
         return None
+    out: Any = ""
     try:
-        out = res.get("output", "") if isinstance(res, dict) else ""
+        getr: Any = getattr(res, "get", None)
+        if callable(getr):
+            out = getr("output", "")
     except Exception:
         return None
     meta: Any = {}
@@ -520,13 +532,16 @@ async def _ydl_info(ctx: Any, url: Any) -> Any:
 def _pick_file(output: Any, exts: Any) -> Any:
     if not output:
         return None
+    seq: Any = exts
+    if not isinstance(exts, (list, tuple)):
+        return None
     cands: Any = []
     for line in str(output).splitlines():
         t = line.strip().strip("'\"")
         if not t:
             continue
         low = t.lower()
-        for e in exts or ():
+        for e in seq:
             try:
                 if isinstance(e, str) and e and low.endswith(e.casefold()):
                     cands.append(t.split()[-1].strip("'\""))
@@ -565,7 +580,6 @@ def _caption(meta: Any, service: Any, url: Any, compact: Any = False) -> Any:
             if s and s.casefold() != "na":
                 return s
         return ""
-    label = SVC_LABEL.get(service, "Видео")
     desc = _clean_desc(one("description"), 900 if service == SVC_X else 700)
     author = one("uploader", "channel", "artist")
     ts = one("timestamp")
@@ -656,8 +670,11 @@ async def _tikwm(ctx: Any, url: Any) -> Any:
             res = await ctx.net(api, data={"url": str(url), "hd": 1, "count": 12}, timeout=15)
         except Exception:
             continue
+        body: Any = ""
         try:
-            body = res.get("body", "") if isinstance(res, dict) else ""
+            getr: Any = getattr(res, "get", None)
+            if callable(getr):
+                body = getr("body", "")
         except Exception:
             continue
         if body and isinstance(body, str) and '"code":0' in body.replace(" ", ""):
@@ -668,8 +685,11 @@ async def _tikwm(ctx: Any, url: Any) -> Any:
             res = await ctx.net("https://tikwm.com/api/?url=" + quote(str(url), safe=""), timeout=15)
         except Exception:
             res = None
+        body = None
         try:
-            body = res.get("body", "") if isinstance(res, dict) else ""
+            getr = getattr(res, "get", None)
+            if callable(getr):
+                body = getr("body", "")
         except Exception:
             body = None
     if not body or not isinstance(body, str):
@@ -768,7 +788,7 @@ def _tikwm_images(data: Any) -> Any:
     return out
 async def _curl_dl(ctx: Any, url: Any, fname: Any, timeout: Any = 45) -> Any:
     try:
-        res = await _shell(ctx, "curl -sL --max-time " + str(int(timeout) - 5) + " -o " + _shq(fname) + " " + _shq(url) + " 2>&1 | tail -n 5", timeout)
+        await _shell(ctx, "curl -sL --max-time " + str(int(timeout) - 5) + " -o " + _shq(fname) + " " + _shq(url) + " 2>&1 | tail -n 5", timeout)
     except Exception:
         return False
     try:
@@ -795,11 +815,13 @@ async def _dl_video(ctx: Any, url: Any, audio_only: Any, tpl: Any) -> Any:
         res = await _shell(ctx, cmd, 50)
     except Exception as e:
         return None, {}, "shell:" + _esc(type(e).__name__ + ": " + str(e)[:200])
-    rc = None
-    out = ""
+    rc: Any = -1
+    out: Any = ""
     try:
-        rc = res.get("returncode") if isinstance(res, dict) else -1
-        out = res.get("output", "") if isinstance(res, dict) else ""
+        getr: Any = getattr(res, "get", None)
+        if callable(getr):
+            rc = getr("returncode", -1)
+            out = getr("output", "")
     except Exception:
         return None, {}, "readout"
     if "NO_YTDLP" in str(out) or rc == 3:
@@ -810,8 +832,11 @@ async def _dl_video(ctx: Any, url: Any, audio_only: Any, tpl: Any) -> Any:
     return fname, {}, ""
 async def _dl_album(ctx: Any, urls: Any, service: Any) -> Any:
     items: Any = []
+    seq: Any = urls
+    if not isinstance(urls, list):
+        return []
     try:
-        for u in urls or []:
+        for u in seq:
             if isinstance(u, str) and u.startswith("http") and len(items) < 10:
                 items.append(u)
     except Exception:
@@ -826,8 +851,11 @@ async def _dl_album(ctx: Any, urls: Any, service: Any) -> Any:
         res = await _shell(ctx, cmd, 55)
     except Exception:
         return []
+    out: Any = ""
     try:
-        out = res.get("output", "") if isinstance(res, dict) else ""
+        getr: Any = getattr(res, "get", None)
+        if callable(getr):
+            out = getr("output", "")
     except Exception:
         return []
     links: Any = []
@@ -838,8 +866,11 @@ async def _dl_album(ctx: Any, urls: Any, service: Any) -> Any:
     return links
 async def _send_links(ctx: Any, service: Any, meta: Any, url: Any, links: Any, compact: Any = False) -> Any:
     items: Any = []
+    seq: Any = links
+    if not isinstance(links, list):
+        return
     try:
-        for u in links or []:
+        for u in seq:
             if isinstance(u, str) and u.startswith("https://") and u not in items:
                 items.append(u)
     except Exception:
@@ -872,7 +903,7 @@ async def _tiktok_flow(ctx: Any, url: Any, invocation: Any, audio_only: Any, com
             else:
                 link = await _up_link(ctx, fname)
                 if link:
-                    await _send_links(ctx, SVC_TT, meta or {}, url, [link], compact)
+                    await _send_links(ctx, SVC_TT, meta, url, [link], compact)
                     return
                 await ctx.respond("<b>Не удалось залить.</b>")
                 return
@@ -914,7 +945,7 @@ async def _tiktok_flow(ctx: Any, url: Any, invocation: Any, audio_only: Any, com
         else:
             link = await _up_link(ctx, fname)
             if link:
-                await _send_links(ctx, SVC_TT, await _ydl_info(ctx, url) or {}, url, [link], compact)
+                await _send_links(ctx, SVC_TT, await _ydl_info(ctx, url), url, [link], compact)
                 return
             await ctx.respond("<b>Не удалось залить.</b>")
             return
@@ -924,8 +955,11 @@ async def _to_mp3(ctx: Any, fname: Any) -> Any:
         res = await _shell(ctx, "command -v ffmpeg >/dev/null 2>&1 || { echo NO_FFMPEG; }; ffmpeg -y -v error -i " + _shq(fname) + " -vn -c:a libmp3lame -b:a 192k tk_au.mp3 2>&1 | tail -n 5", 50)
     except Exception:
         return False
+    out: Any = ""
     try:
-        out = res.get("output", "") if isinstance(res, dict) else ""
+        getr: Any = getattr(res, "get", None)
+        if callable(getr):
+            out = getr("output", "")
     except Exception:
         return False
     if "NO_FFMPEG" in str(out):
@@ -949,7 +983,7 @@ async def _send_audio_link(ctx: Any, url: Any, fname: Any, meta: Any = None) -> 
     if not link:
         await ctx.respond("<b>Не удалось залить.</b>")
         return
-    text = _sound_caption(meta or {}, url)
+    text = _sound_caption(meta, url)
     await ctx.respond(text + "\n<a href=\"" + _esc(link) + "\">Скачать аудио</a> <i>(доступен 72 часа)</i>", parse_mode="HTML")
 async def _generic_flow(ctx: Any, url: Any, invocation: Any, service: Any, compact: Any = False) -> Any:
     await ctx.respond("<b>Скачиваю…</b>")
@@ -990,7 +1024,7 @@ async def _generic_flow(ctx: Any, url: Any, invocation: Any, service: Any, compa
             if urls:
                 links = await _dl_album(ctx, urls, service)
                 if links:
-                    await _send_links(ctx, service, meta or {}, url, links, compact)
+                    await _send_links(ctx, service, meta, url, links, compact)
                     return
                 await ctx.respond("<b>Не удалось скачать.</b>")
                 return
@@ -1017,9 +1051,9 @@ async def _generic_flow(ctx: Any, url: Any, invocation: Any, service: Any, compa
         await ctx.respond("<b>Не удалось залить.</b>")
         return
     if text_only:
-        await ctx.respond(_caption(meta or {}, service, url, True), parse_mode="HTML")
+        await ctx.respond(_caption(meta, service, url, True), parse_mode="HTML")
         return
-    await _send_links(ctx, service, meta or {}, url, [link], compact)
+    await _send_links(ctx, service, meta, url, [link], compact)
 def one_of(meta: Any, *keys: Any) -> Any:
     for k in keys:
         try:
@@ -1085,11 +1119,14 @@ async def _ytdlp_flow(ctx: Any, invocation: Any, update: Any = False) -> Any:
     except Exception as e:
         await ctx.respond("<b>Не удалось проверить yt-dlp:</b> <code>" + _esc(type(e).__name__) + "</code>")
         return
+    out: Any = ""
     try:
-        out = res.get("output", "") if isinstance(res, dict) else ""
+        getr: Any = getattr(res, "get", None)
+        if callable(getr):
+            out = getr("output", "")
     except Exception:
         out = ""
-    cur = ""
+    cur: Any = ""
     for line in str(out).splitlines():
         t = line.strip()
         if t and t != "---" and not t.startswith("NO_JS") and "command -v" not in t:
@@ -1101,8 +1138,14 @@ async def _ytdlp_flow(ctx: Any, invocation: Any, update: Any = False) -> Any:
         res2 = await ctx.net("https://pypi.org/pypi/yt-dlp/json", timeout=12)
     except Exception:
         res2 = None
+    body: Any = ""
     try:
-        body = res2.get("body", "") if isinstance(res2, dict) else ""
+        getr: Any = getattr(res2, "get", None)
+        if callable(getr):
+            body = getr("body", "")
+    except Exception:
+        body = ""
+    try:
         data = json.loads(body) if isinstance(body, str) and body else None
         getd: Any = getattr(data, "get", None)
         info = getd("info") if callable(getd) else None
@@ -1122,8 +1165,11 @@ async def _ytdlp_flow(ctx: Any, invocation: Any, update: Any = False) -> Any:
     except Exception as e:
         await ctx.respond("<b>Не удалось обновить:</b> <code>" + _esc(type(e).__name__) + "</code>")
         return
+    out3: Any = ""
     try:
-        out3 = res3.get("output", "") if isinstance(res3, dict) else ""
+        getr: Any = getattr(res3, "get", None)
+        if callable(getr):
+            out3 = getr("output", "")
     except Exception:
         out3 = ""
     await ctx.respond("<b>Готово.</b>\n<blockquote expandable>" + _esc(str(out3)[-1200:]) + "</blockquote>")
@@ -1184,8 +1230,12 @@ async def command_ytstat(ctx: Any, invocation: Any) -> Any:
     await command_stat(ctx, invocation)
 async def command_ytdlp(ctx: Any, invocation: Any) -> Any:
     update = False
+    args: Any = ()
     try:
-        args = getattr(invocation, "args", ()) or ()
+        args = getattr(invocation, "args", ())
+    except Exception:
+        args = ()
+    try:
         update = any(str(a).casefold() == "update" for a in args)
     except Exception:
         update = False
