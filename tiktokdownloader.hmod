@@ -665,14 +665,14 @@ def _sound_caption(meta: Any, url: Any) -> Any:
     return "\n".join(lines)
 async def _tikwm(ctx: Any, url: Any) -> Any:
     body: Any = None
+    getr: Any = None
     for api in ("https://www.tikwm.com/api/", "https://tikwm.com/api/"):
         try:
             res = await ctx.net(api, data={"url": str(url), "hd": 1, "count": 12}, timeout=15)
         except Exception:
             continue
-        body: Any = ""
         try:
-            getr: Any = getattr(res, "get", None)
+            getr = getattr(res, "get", None)
             if callable(getr):
                 body = getr("body", "")
         except Exception:
@@ -895,7 +895,7 @@ async def _tiktok_flow(ctx: Any, url: Any, invocation: Any, audio_only: Any, com
     tried_ydl = False
     if not (fix and short):
         tried_ydl = True
-        fname, _, fail = await _dl_video(ctx, url, audio_only, "au_%(id)s.%(ext)s" if audio_only else "dl_%(id)s.%(ext)s")
+        fname, _, _ = await _dl_video(ctx, url, audio_only, "au_%(id)s.%(ext)s" if audio_only else "dl_%(id)s.%(ext)s")
         if fname:
             meta = await _ydl_info(ctx, url)
             if audio_only:
@@ -938,7 +938,7 @@ async def _tiktok_flow(ctx: Any, url: Any, invocation: Any, audio_only: Any, com
     if tried_ydl:
         await ctx.respond("<b>Не удалось скачать.</b>")
         return
-    fname, _, fail = await _dl_video(ctx, url, audio_only, "au_%(id)s.%(ext)s" if audio_only else "dl_%(id)s.%(ext)s")
+    fname, _, _ = await _dl_video(ctx, url, audio_only, "au_%(id)s.%(ext)s" if audio_only else "dl_%(id)s.%(ext)s")
     if fname:
         if audio_only:
             await _send_audio_link(ctx, url, fname)
@@ -1120,8 +1120,9 @@ async def _ytdlp_flow(ctx: Any, invocation: Any, update: Any = False) -> Any:
         await ctx.respond("<b>Не удалось проверить yt-dlp:</b> <code>" + _esc(type(e).__name__) + "</code>")
         return
     out: Any = ""
+    getr: Any = None
     try:
-        getr: Any = getattr(res, "get", None)
+        getr = getattr(res, "get", None)
         if callable(getr):
             out = getr("output", "")
     except Exception:
@@ -1140,7 +1141,7 @@ async def _ytdlp_flow(ctx: Any, invocation: Any, update: Any = False) -> Any:
         res2 = None
     body: Any = ""
     try:
-        getr: Any = getattr(res2, "get", None)
+        getr = getattr(res2, "get", None)
         if callable(getr):
             body = getr("body", "")
     except Exception:
@@ -1167,7 +1168,7 @@ async def _ytdlp_flow(ctx: Any, invocation: Any, update: Any = False) -> Any:
         return
     out3: Any = ""
     try:
-        getr: Any = getattr(res3, "get", None)
+        getr = getattr(res3, "get", None)
         if callable(getr):
             out3 = getr("output", "")
     except Exception:
