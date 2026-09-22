@@ -1,6 +1,6 @@
 HOTARU = {
     "id": "tiktokdownloader",
-    "version": "2.0.1",
+    "version": "2.0.2",
     "commands": ["tt", "ttsound", "yt", "stat", "ytstat", "ytdlp", "x", "twitter", "ig", "inst", "instagram", "ttenable", "ttdisable", "ttchats", "ytenable", "ytdisable", "ytchats", "xenable", "xdisable", "xchats", "igenable", "igdisable", "igchats", "allenable", "alldisable", "allchats", "autoconfigure", "autoconfig"],
     "capabilities": ["state", "files", "shell"],
     "watchers": ["autodl"],
@@ -497,13 +497,35 @@ async def _shell(ctx: Any, command: Any, timeout: Any = 50) -> Any:
     except Exception:
         timeout = 50
     return await ctx.cap("shell", {"command": command[:4000], "timeout": timeout})
+async def _has_cookies(ctx: Any) -> Any:
+    try:
+        names = await ctx.cap("files", {"op": "list"})
+    except Exception:
+        return False
+    items: Any = names
+    if not isinstance(names, list):
+        return False
+    for n in items:
+        try:
+            if isinstance(n, str) and n == "cookies.txt":
+                return True
+        except Exception:
+            continue
+    return False
+async def _ck_arg(ctx: Any) -> Any:
+    try:
+        if await _has_cookies(ctx):
+            return " --cookies cookies.txt"
+    except Exception:
+        pass
+    return ""
 def _meta_prints() -> Any:
     parts: Any = []
     for key, tmpl in META_PRINTS:
         parts.append("--print " + _shq("HOTARU:" + key + "=" + tmpl))
     return " ".join(parts)
 async def _ydl_info(ctx: Any, url: Any) -> Any:
-    cmd = "yt-dlp --skip-download --no-playlist --no-warnings --socket-timeout 15 --retries 2 " + _meta_prints() + " " + _shq(url) + " 2>&1 | tail -n 40"
+    cmd = "yt-dlp --impersonate chrome --skip-download --no-playlist --no-warnings --socket-timeout 15 --retries 2" + await _ck_arg(ctx) + " " + _meta_prints() + " " + _shq(url) + " 2>&1 | tail -n 40"
     try:
         res = await _shell(ctx, cmd, 25)
     except Exception:
@@ -810,7 +832,7 @@ async def _dl_video(ctx: Any, url: Any, audio_only: Any, tpl: Any) -> Any:
         fmt = '"bestaudio/best" -x --audio-format mp3'
     else:
         fmt = '"bv*[ext=mp4]+ba[ext=m4a]/b[ext=mp4]/bv*+ba/b" --merge-output-format mp4'
-    cmd = "yt-dlp --no-playlist --no-warnings --socket-timeout 20 --retries 3 --max-filesize 100M -f " + fmt + " -o '" + str(tpl) + "' --print after_move:filepath " + _shq(url) + " 2>&1 | tail -n 30"
+    cmd = "yt-dlp --impersonate chrome --no-playlist --no-warnings --socket-timeout 20 --retries 3 --max-filesize 100M" + await _ck_arg(ctx) + " -f " + fmt + " -o '" + str(tpl) + "' --print after_move:filepath " + _shq(url) + " 2>&1 | tail -n 30"
     try:
         res = await _shell(ctx, cmd, 50)
     except Exception as e:
